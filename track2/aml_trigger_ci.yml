@@ -1,0 +1,12 @@
+# Small CPU compute INSTANCE that submits jobs to the GPU cluster. It MUST live
+# in the workspace VNet's AML subnet so its code upload reaches the storage
+# private endpoint. The subnet is NOT a YAML field for compute instances - pass
+# it on the CLI, combined with this file for the idle-shutdown setting:
+#     az ml compute create -f track2/aml_trigger_ci.yml `
+#       --subnet /subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Network/virtualNetworks/<vnet-name>/subnets/snet-aml `
+#       -g <resource-group> -w <workspace>
+$schema: https://azuremlschemas.azureedge.net/latest/computeInstance.schema.json
+name: skino-trigger
+type: computeinstance
+size: Standard_DS3_v2
+idle_time_before_shutdown_minutes: 30

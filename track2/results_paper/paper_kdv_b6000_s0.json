@@ -1,0 +1,173 @@
+{
+  "_meta": {
+    "problem": "kdv",
+    "n_traj": 512,
+    "horizon": 600,
+    "t_out": 500,
+    "grid_n": 64,
+    "dt": 0.001,
+    "budget": 6000,
+    "epochs": 8,
+    "seed": 0,
+    "checkpoints": [
+      10,
+      25,
+      50,
+      100,
+      150,
+      200
+    ]
+  },
+  "skino_noise": {
+    "family": "skino",
+    "mode": "recursive",
+    "noise": 0.02,
+    "lambda_pde": 0.0,
+    "params": 5463,
+    "width": [
+      12,
+      4
+    ],
+    "train_time_s": 62.01358771324158,
+    "final_train_loss": 0.013720457078306936,
+    "usable_horizon": 0,
+    "metrics": {
+      "10": {
+        "rel_rms": 0.23854315280914307,
+        "amp_ratio": 0.7591308951377869,
+        "pattern_corr": 0.6278893351554871,
+        "spec_low": 0.12600985169410706,
+        "spec_high": 67769.75,
+        "energy_err": 2.7338523864746094,
+        "mass_err": 0.007815062999725342,
+        "verdict": "degraded"
+      },
+      "25": {
+        "rel_rms": 4.014087677001953,
+        "amp_ratio": 12.799485206604004,
+        "pattern_corr": -0.05684090778231621,
+        "spec_low": 2.85441517829895,
+        "spec_high": 500098.15625,
+        "energy_err": 3371.470458984375,
+        "mass_err": 0.021676838397979736,
+        "verdict": "blow-up"
+      },
+      "50": {
+        "rel_rms": 4517.64208984375,
+        "amp_ratio": 14487.51953125,
+        "pattern_corr": 0.046181801706552505,
+        "spec_low": 3274.128662109375,
+        "spec_high": 230016048.0,
+        "energy_err": 4866259968.0,
+        "mass_err": 108.98873138427734,
+        "verdict": "blow-up"
+      },
+      "100": {
+        "rel_rms": 803782.3125,
+        "amp_ratio": 2631332.25,
+        "pattern_corr": 0.0245380699634552,
+        "spec_low": 576207.125,
+        "spec_high": 88236122112.0,
+        "energy_err": 5953508108926976.0,
+        "mass_err": 16531.0,
+        "verdict": "blow-up"
+      },
+      "150": {
+        "rel_rms": 804369.6875,
+        "amp_ratio": 2634155.25,
+        "pattern_corr": -0.04854419454932213,
+        "spec_low": 573156.125,
+        "spec_high": 81728897024.0,
+        "energy_err": 6837736111603712.0,
+        "mass_err": 18225.01953125,
+        "verdict": "blow-up"
+      },
+      "200": {
+        "rel_rms": 808714.5625,
+        "amp_ratio": 2647872.5,
+        "pattern_corr": 0.025235632434487343,
+        "spec_low": 577261.6875,
+        "spec_high": 66933460992.0,
+        "energy_err": 4905071158493184.0,
+        "mass_err": 14997.9111328125,
+        "verdict": "blow-up"
+      }
+    }
+  },
+  "fno_noise": {
+    "family": "fno",
+    "mode": "recursive",
+    "noise": 0.02,
+    "lambda_pde": 0.0,
+    "params": 4481,
+    "width": [
+      8,
+      8
+    ],
+    "train_time_s": 43.50189423561096,
+    "final_train_loss": 0.0015089268672454637,
+    "usable_horizon": 45,
+    "metrics": {
+      "10": {
+        "rel_rms": 0.049672480672597885,
+        "amp_ratio": 1.0094150304794312,
+        "pattern_corr": 0.9881286025047302,
+        "spec_low": 0.025746719911694527,
+        "spec_high": 24703.126953125,
+        "energy_err": 0.3780055046081543,
+        "mass_err": 0.005129895638674498,
+        "verdict": "good"
+      },
+      "25": {
+        "rel_rms": 0.08570077270269394,
+        "amp_ratio": 1.0017695426940918,
+        "pattern_corr": 0.9647569060325623,
+        "spec_low": 0.0423833467066288,
+        "spec_high": 26916.365234375,
+        "energy_err": 0.8178574442863464,
+        "mass_err": 0.005467148032039404,
+        "verdict": "good"
+      },
+      "50": {
+        "rel_rms": 0.14646044373512268,
+        "amp_ratio": 1.007901668548584,
+        "pattern_corr": 0.8901209235191345,
+        "spec_low": 0.07238329201936722,
+        "spec_high": 28258.177734375,
+        "energy_err": 1.8008995056152344,
+        "mass_err": 0.007219539489597082,
+        "verdict": "degraded"
+      },
+      "100": {
+        "rel_rms": 0.25708985328674316,
+        "amp_ratio": 1.1508742570877075,
+        "pattern_corr": 0.6996445059776306,
+        "spec_low": 0.13635261356830597,
+        "spec_high": 39226.18359375,
+        "energy_err": 6.76936149597168,
+        "mass_err": 0.01960325799882412,
+        "verdict": "degraded"
+      },
+      "150": {
+        "rel_rms": 0.3790704309940338,
+        "amp_ratio": 1.3247127532958984,
+        "pattern_corr": 0.46904468536376953,
+        "spec_low": 0.19852133095264435,
+        "spec_high": 66683.8828125,
+        "energy_err": 32.11476516723633,
+        "mass_err": 0.042516257613897324,
+        "verdict": "degraded"
+      },
+      "200": {
+        "rel_rms": 0.6128311157226562,
+        "amp_ratio": 1.9066766500473022,
+        "pattern_corr": 0.20756758749485016,
+        "spec_low": 0.329108864068985,
+        "spec_high": 123148.0546875,
+        "energy_err": 140.9631805419922,
+        "mass_err": 0.09471511840820312,
+        "verdict": "decorrelated"
+      }
+    }
+  }
+}

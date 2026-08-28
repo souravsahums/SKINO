@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "problem": "wave3d",
+    "n_traj": 48,
+    "horizon": 200,
+    "t_out": 150,
+    "grid_n": 16,
+    "dt": 0.02,
+    "budget": 25000,
+    "epochs": 12,
+    "seed": 2,
+    "checkpoints": [
+      10,
+      25,
+      50,
+      100,
+      150
+    ],
+    "hardware": {
+      "device": "cpu",
+      "torch": "2.12.0+cpu",
+      "host": "RbParadox",
+      "platform": "Windows-11-10.0.26200-SP0",
+      "gpu": "cpu"
+    }
+  },
+  "fno_seq2seq": {
+    "family": "fno",
+    "mode": "seq2seq",
+    "noise": 0.0,
+    "lambda_pde": 0.0,
+    "params": 26977,
+    "width": [
+      5,
+      5
+    ],
+    "train_time_s": 138.9378662109375,
+    "final_train_loss": 0.5373936569368517,
+    "usable_horizon": 0,
+    "last_good_step": 0,
+    "metrics": {
+      "10": {
+        "rel_rms": 0.7377462983131409,
+        "amp_ratio": 0.6429197192192078,
+        "pattern_corr": 0.6686518788337708,
+        "spec_low": 1.364262580871582,
+        "spec_high": 412018.15625,
+        "energy_err": 1.7578754425048828,
+        "mass_err": NaN,
+        "verdict": "degraded"
+      },
+      "25": {
+        "rel_rms": 0.7049357295036316,
+        "amp_ratio": 0.6438355445861816,
+        "pattern_corr": 0.7127364277839661,
+        "spec_low": 1.43402898311615,
+        "spec_high": 263786.9375,
+        "energy_err": 0.6713070273399353,
+        "mass_err": NaN,
+        "verdict": "degraded"
+      },
+      "50": {
+        "rel_rms": 0.7477104067802429,
+        "amp_ratio": 0.7054914832115173,
+        "pattern_corr": 0.6641924977302551,
+        "spec_low": 1.1123405694961548,
+        "spec_high": 223648.296875,
+        "energy_err": 0.3930879831314087,
+        "mass_err": NaN,
+        "verdict": "degraded"
+      },
+      "100": {
+        "rel_rms": 0.7775580883026123,
+        "amp_ratio": 0.6445362567901611,
+        "pattern_corr": 0.6274945139884949,
+        "spec_low": 1.9643759727478027,
+        "spec_high": 139491.203125,
+        "energy_err": 0.5659716725349426,
+        "mass_err": NaN,
+        "verdict": "degraded"
+      },
+      "150": {
+        "rel_rms": 0.7472186088562012,
+        "amp_ratio": 0.6667816042900085,
+        "pattern_corr": 0.6686899662017822,
+        "spec_low": 1.356082558631897,
+        "spec_high": 84584.8046875,
+        "energy_err": 0.7892948985099792,
+        "mass_err": NaN,
+        "verdict": "degraded"
+      }
+    }
+  }
+}

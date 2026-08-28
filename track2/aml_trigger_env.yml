@@ -1,0 +1,18 @@
+# Conda environment for the SKINO AML *trigger* only.
+# This env is used on the small CPU compute instance to SUBMIT jobs to the GPU
+# cluster. It does NOT run any training - the cluster jobs use their own curated
+# PyTorch environment - so it only needs the Azure ML SDK and an auth library.
+#
+# Create and use it on the compute-instance terminal:
+#     conda env create -f track2/aml_trigger_env.yml
+#     conda activate skino-trigger
+#     python -m track2.aml_trigger
+name: skino-trigger
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - azure-ai-ml>=1.34,<2
+      - azure-identity>=1.15
