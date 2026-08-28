@@ -280,6 +280,26 @@ The training script `skino/train.py` reproduces the following qualitative facts 
 
 ---
 
+## 7.5 Azure ML experiment scripts — environment variables
+
+The cloud experiment tooling in `track2/` (`aml_trigger.py`, `aml_fetch.py`,
+`azureml_submit.py`, and the `aml_*.yml` / `aml_submit_window.ps1` helpers) reads
+its Azure targets from **environment variables** rather than hardcoded values —
+set these before running any of them:
+
+```bash
+export AML_SUBSCRIPTION_ID="<your-subscription-id>"
+export AML_RESOURCE_GROUP="<your-resource-group>"
+export AML_WORKSPACE="<your-workspace-name>"
+export AML_STORAGE_ACCOUNT="<your-storage-account>"   # aml_submit_window.ps1 only
+```
+
+PowerShell equivalent: `$env:AML_SUBSCRIPTION_ID = "<your-subscription-id>"` (and so on).
+Authentication uses `DefaultAzureCredential` (e.g. `az login`); no keys or secrets
+are committed to the repo.
+
+---
+
 ## 8. License & citation
 
 This is research code; use it as a starting point. If you build on the architecture, please cite the proofs document.
