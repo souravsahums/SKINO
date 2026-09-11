@@ -1,6 +1,6 @@
 """End-to-end orchestrator: generate data, train, roll out, render video, report.
 
-Convenience entry point for the FNO vs SKINO comparison pipeline. Use this
+Convenience entry point for the FNO vs CKINO comparison pipeline. Use this
 when you want a single command that produces everything under
 HamiltonianNN/. Skips finished stages by default.
 
@@ -66,7 +66,7 @@ def main(argv=None):
         )
     if not args.skip_train:
         stage(
-            "Train FNO + SKINO",
+            "Train FNO + CKINO",
             [
                 args.python, "train.py",
                 "--train-runs", "0", "1",

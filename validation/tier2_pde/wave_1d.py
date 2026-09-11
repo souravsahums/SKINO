@@ -20,12 +20,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from skino.nd import SKINO_ND
+from ckino.nd import CKINO_ND
 from ..common import (
     FNO1D,
     DeepONet1D,
     TinyTransformer1D,
-    SKINO1DNoSymplectic,
+    CKINO1DNoSymplectic,
     relative_l2,
     set_global_seed,
 )
@@ -102,13 +102,13 @@ def make_dataset(n_batch: int, n: int, seed: int) -> tuple[torch.Tensor, torch.T
 # ---------------------------------------------------------------------------
 # Model adapters (uniform forward(x) -> y signature, two channels)
 # ---------------------------------------------------------------------------
-class _SKINOWaveAdapter(nn.Module):
+class _CKINOWaveAdapter(nn.Module):
     def __init__(self, n_train: int):
         super().__init__()
         # Internal leap-frog dt = 0.005 (4x smaller than the physical PDE step
         # 0.02). The symplectic block remains stable provided the largest
         # learned eigen-frequency omega satisfies omega * dt_internal < 2.
-        self.net = SKINO_ND(
+        self.net = CKINO_ND(
             spatial_dims=1,
             n_train=n_train,
             in_channels=2,
@@ -123,10 +123,10 @@ class _SKINOWaveAdapter(nn.Module):
         return self.net(x)
 
 
-class _SKINONoSympWaveAdapter(nn.Module):
+class _CKINONoSympWaveAdapter(nn.Module):
     def __init__(self, n_train: int):
         super().__init__()
-        self.net = SKINO1DNoSymplectic(
+        self.net = CKINO1DNoSymplectic(
             n_train=n_train,
             in_channels=2,
             out_channels=2,
@@ -224,21 +224,21 @@ def run() -> dict:
     epochs = 200
     results = {}
 
-    # SKINO ------------------------------------------------------------------
+    # CKINO ------------------------------------------------------------------
     set_global_seed(1)
-    m = _SKINOWaveAdapter(n_train=n - 1)
+    m = _CKINOWaveAdapter(n_train=n - 1)
     t = train_pde_one_step(m, train_inputs, train_targets, epochs=epochs)
-    results["SKINO"] = _evaluate(
-        "SKINO", m, test_inputs, test_targets, ic, true_traj, n_long,
+    results["CKINO"] = _evaluate(
+        "CKINO", m, test_inputs, test_targets, ic, true_traj, n_long,
         sum(p.numel() for p in m.parameters()), t["train_time_s"]
     )
 
-    # SKINO-NoSymp ablation --------------------------------------------------
+    # CKINO-NoSymp ablation --------------------------------------------------
     set_global_seed(2)
-    m = _SKINONoSympWaveAdapter(n_train=n - 1)
+    m = _CKINONoSympWaveAdapter(n_train=n - 1)
     t = train_pde_one_step(m, train_inputs, train_targets, epochs=epochs)
-    results["SKINO-NoSymp"] = _evaluate(
-        "SKINO-NoSymp", m, test_inputs, test_targets, ic, true_traj, n_long,
+    results["CKINO-NoSymp"] = _evaluate(
+        "CKINO-NoSymp", m, test_inputs, test_targets, ic, true_traj, n_long,
         sum(p.numel() for p in m.parameters()), t["train_time_s"]
     )
 

@@ -1,7 +1,7 @@
 """L4 + L5 — operator generalisation (across resolutions) and complexity.
 
-L4: train SKINO at N=32, evaluate at N=64 and N=128 on the wave equation
-    without retraining.  SKINO_ND stores basis functions as Chebyshev
+L4: train CKINO at N=32, evaluate at N=64 and N=128 on the wave equation
+    without retraining.  CKINO_ND stores basis functions as Chebyshev
     coefficients, so this is a true zero-shot resolution test.
 
 L5: wall-clock training/inference time and memory footprint of every
@@ -16,12 +16,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from skino.nd import SKINO_ND
+from ckino.nd import CKINO_ND
 from ..common import (
     FNO1D,
     DeepONet1D,
     TinyTransformer1D,
-    SKINO1DNoSymplectic,
+    CKINO1DNoSymplectic,
     relative_l2,
     set_global_seed,
 )
@@ -81,15 +81,15 @@ def run() -> dict:
     epochs = 50
     results = {}
 
-    # SKINO — fully resolution-agnostic (Chebyshev-coefficient parameterisation).
+    # CKINO — fully resolution-agnostic (Chebyshev-coefficient parameterisation).
     set_global_seed(1)
-    m = SKINO_ND(spatial_dims=1, n_train=31, in_channels=2, out_channels=2,
+    m = CKINO_ND(spatial_dims=1, n_train=31, in_channels=2, out_channels=2,
                  hidden_channels=16, rank=8, depth=3, dt=DT)
     tinfo = train_pde_one_step(m, train_inputs, train_targets, epochs=epochs)
     res_err = _resolution_eval(m, 8, seed=400)
     ic = random_ic(1, 32, seed=999)
     inf_time = _measure_time(lambda: m(ic))
-    results["SKINO"] = {
+    results["CKINO"] = {
         "resolution_errors": res_err,
         "inference_time_s": inf_time,
         "train_time_s": tinfo["train_time_s"],
@@ -97,14 +97,14 @@ def run() -> dict:
         "memory_bytes": _model_memory(m),
     }
 
-    # SKINO-NoSymp — also resolution-agnostic (same kernel).
+    # CKINO-NoSymp — also resolution-agnostic (same kernel).
     set_global_seed(2)
-    m = SKINO1DNoSymplectic(n_train=31, in_channels=2, out_channels=2,
+    m = CKINO1DNoSymplectic(n_train=31, in_channels=2, out_channels=2,
                             hidden_channels=16, rank=8, depth=3, dt=DT)
     tinfo = train_pde_one_step(m, train_inputs, train_targets, epochs=epochs)
     res_err = _resolution_eval(m, 8, seed=401)
     inf_time = _measure_time(lambda: m(ic))
-    results["SKINO-NoSymp"] = {
+    results["CKINO-NoSymp"] = {
         "resolution_errors": res_err,
         "inference_time_s": inf_time,
         "train_time_s": tinfo["train_time_s"],

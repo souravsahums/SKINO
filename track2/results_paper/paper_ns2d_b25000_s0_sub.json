@@ -1,0 +1,104 @@
+{
+  "_meta": {
+    "problem": "ns2d",
+    "n_traj": 6,
+    "horizon": 20,
+    "t_out": 12,
+    "grid_n": 64,
+    "dt": 0.01,
+    "budget": 25000,
+    "epochs": 1,
+    "seed": 0,
+    "checkpoints": [
+      10
+    ],
+    "hardware": {
+      "device": "cpu",
+      "torch": "2.12.0+cpu",
+      "host": "RbParadox",
+      "platform": "Windows-11-10.0.26200-SP0",
+      "gpu": "cpu"
+    }
+  },
+  "skino_noise": {
+    "family": "skino",
+    "mode": "recursive",
+    "noise": 0.02,
+    "lambda_pde": 0.0,
+    "params": 26187,
+    "width": [
+      24,
+      8
+    ],
+    "train_time_s": 20.388251304626465,
+    "final_train_loss": 5.460445880889893,
+    "usable_horizon": 0,
+    "last_good_step": 0,
+    "metrics": {
+      "10": {
+        "rel_rms": 48.31959533691406,
+        "amp_ratio": 48.67963790893555,
+        "pattern_corr": 0.9993287920951843,
+        "spec_low": 49.348907470703125,
+        "spec_high": 3307453.25,
+        "energy_err": 2430.1142578125,
+        "mass_err": 5921401344.0,
+        "verdict": "blow-up"
+      }
+    }
+  },
+  "fno_noise": {
+    "family": "fno",
+    "mode": "recursive",
+    "noise": 0.02,
+    "lambda_pde": 0.0,
+    "params": 29381,
+    "width": [
+      10,
+      6
+    ],
+    "train_time_s": 8.608689785003662,
+    "final_train_loss": 0.47874245047569275,
+    "usable_horizon": 10,
+    "last_good_step": 10,
+    "metrics": {
+      "10": {
+        "rel_rms": 2.4177353382110596,
+        "amp_ratio": 1.0505613088607788,
+        "pattern_corr": 0.9996041655540466,
+        "spec_low": 3.7538211345672607,
+        "spec_high": 27.59038734436035,
+        "energy_err": 6.009537220001221,
+        "mass_err": 1836985856.0,
+        "verdict": "good"
+      }
+    }
+  },
+  "skino_seq2seq": {
+    "family": "skino",
+    "mode": "seq2seq",
+    "noise": 0.0,
+    "lambda_pde": 0.0,
+    "params": 26487,
+    "width": [
+      24,
+      8
+    ],
+    "train_time_s": 0.512509822845459,
+    "final_train_loss": 0.9732220768928528,
+    "usable_horizon": 0,
+    "last_good_step": 0,
+    "metrics": {
+      "10": {
+        "rel_rms": 1.1407579183578491,
+        "amp_ratio": 0.13939760625362396,
+        "pattern_corr": -0.9993138909339905,
+        "spec_low": 0.865206241607666,
+        "spec_high": 2229.61474609375,
+        "energy_err": 0.9772751331329346,
+        "mass_err": 43377644.0,
+        "verdict": "dead"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# Track 2 findings — making SKINO usable at autoregressive rollout
+# Track 2 findings — making CKINO usable at autoregressive rollout
 
 Research program directed by **Dr Gareth O'Brien**. This document is updated as
 experiments complete. Numeric result tables are populated from the JSON written
@@ -8,13 +8,13 @@ under [`results/`](results); anything not yet measured is marked _pending_.
 
 ## 1. Premise and goal
 
-The 3-D elastic-lattice seismic study established that **both FNO and SKINO fail
+The 3-D elastic-lattice seismic study established that **both FNO and CKINO fail
 the long-horizon autoregressive rollout** (~100 % wMAPE — no better than
 predicting no motion). Ranking two failing models is not meaningful. Track 2
 therefore drops the head-to-head framing and asks a single **absolute** question
 on deliberately simplified, smooth problems:
 
-> Can SKINO be trained to roll out to a *useful* horizon at all — and which
+> Can CKINO be trained to roll out to a *useful* horizon at all — and which
 > ingredients extend that horizon?
 
 Success is defined against an absolute bar (relative RMS staying under a
@@ -129,9 +129,9 @@ noise, no teacher forcing):
 Plot: [`results/ablation_wave1d.png`](results/ablation_wave1d.png). Raw: [`results/ablation_wave1d.json`](results/ablation_wave1d.json).
 
 Reading the table:
-* **Plain `baseline` SKINO already rolls out the full 150 steps at 1.4 % relative
+* **Plain `baseline` CKINO already rolls out the full 150 steps at 1.4 % relative
   RMS and 0.3 % energy error** — it never crosses even the 5 % breakdown line. On
-  a clean smooth Hamiltonian PDE, SKINO's rollout is simply *not broken*.
+  a clean smooth Hamiltonian PDE, CKINO's rollout is simply *not broken*.
 * `pushforward` (items 5, 7) is a hair better on the one-step metric and RMS@150
   but essentially tied — at 2.7× the training cost. The drift it is designed to
   cure is nearly absent here.
@@ -170,12 +170,12 @@ entire horizon.
 
 ## 8. Findings
 
-**W1 — SKINO's rollout is not structurally broken.** On a smooth, linear,
-well-resolved Hamiltonian PDE, plain one-step SKINO (21 k parameters) rolls out
+**W1 — CKINO's rollout is not structurally broken.** On a smooth, linear,
+well-resolved Hamiltonian PDE, plain one-step CKINO (21 k parameters) rolls out
 150 steps at < 1.5 % relative RMS and 0.3 % energy error, decisively clearing any
 absolute usefulness bar. The 3-D seismic rollout collapse was therefore a
 property of *that hard problem* — heterogeneous velocity, under-resolution,
-dissipation, only two training trajectories — not a "SKINO cannot roll out"
+dissipation, only two training trajectories — not a "CKINO cannot roll out"
 property. This is the single most important Phase-1 result.
 
 **W2 — On an easy regime the push-forward curriculum barely helps.** `pushforward`
@@ -263,17 +263,17 @@ noise = 0.02 gives a bounded rollout. Below that the blow-up is merely delayed.
 Noise-only 0.02 (RMS@150 = 0.058, accurate to < 5 % until step 127) dramatically
 beats the §7.2 `track2` config that *added* the energy penalty (RMS@150 = 0.288,
 breakdown at step 9). Dropping item 4 turned a mediocre bounded rollout into a
-genuinely good one — SKINO rolling out KdV usefully for ~127 of 150 steps.
+genuinely good one — CKINO rolling out KdV usefully for ~127 of 150 steps.
 
 > **Caveat on item 4.** The energy penalty matches an energy *trajectory*; on
-> conservative wave/KdV that is a conservation prior, which hurts (SKINO already
+> conservative wave/KdV that is a conservation prior, which hurts (CKINO already
 > approximately conserves via structure, and the relative-energy term is
 > ill-conditioned when the true energy passes near zero). Its intended use case
 > — matching a **dissipative decay envelope** — is untested here because both
 > testbeds are conservative. That is the one remaining experiment that would
 > give item 4 a fair trial (a damped/heat-type PDE, or the real seismic field).
 
-**Refined, evidence-based recipe for SKINO rollout on these smooth PDEs:**
+**Refined, evidence-based recipe for CKINO rollout on these smooth PDEs:**
 1. **Noise injection (item 1) is the key stabilizer** — apply it only when the
    un-stabilised rollout is unstable, and dose it to the instability (≈0.02 for
    KdV; 0 for the already-stable wave).

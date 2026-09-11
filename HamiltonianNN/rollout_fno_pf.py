@@ -1,7 +1,7 @@
 """Apples-to-apples rollout for the push-forward-trained FNO.
 
 Loads ``models/fno_pf.pt`` (the FNO checkpoint trained with the same K=1->K=4
-push-forward curriculum SKINO uses) and runs the same autoregressive rollout
+push-forward curriculum CKINO uses) and runs the same autoregressive rollout
 the canonical :mod:`rollout` script does, against the same test trajectory,
 from the same in-distribution start step. Writes:
 
@@ -10,7 +10,7 @@ from the same in-distribution start step. Writes:
   * ``results/rollout_traj_fno_pf.npz``    -- raw rollout in physical units.
 
 The original ``models/fno.pt`` (one-step-trained), the original
-``rollout_metrics.json`` and the SKINO results are left untouched.
+``rollout_metrics.json`` and the CKINO results are left untouched.
 """
 from __future__ import annotations
 

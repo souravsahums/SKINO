@@ -1,1 +1,1 @@
-"""SKINO validation package."""
+"""CKINO validation package."""

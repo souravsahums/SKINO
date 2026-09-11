@@ -1,4 +1,4 @@
-"""Shared utilities for the SKINO validation suite."""
+"""Shared utilities for the CKINO validation suite."""
 from .seed import set_global_seed
 from .metrics import (
     relative_l2,
@@ -14,7 +14,7 @@ from .baselines import (
     FNO1D,
     DeepONet1D,
     TinyTransformer1D,
-    SKINO1DNoSymplectic,
+    CKINO1DNoSymplectic,
 )
 
 __all__ = [
@@ -30,5 +30,5 @@ __all__ = [
     "FNO1D",
     "DeepONet1D",
     "TinyTransformer1D",
-    "SKINO1DNoSymplectic",
+    "CKINO1DNoSymplectic",
 ]

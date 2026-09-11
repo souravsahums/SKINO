@@ -1,8 +1,17 @@
-# SKINO Explained — A Friendly Chapter-Book
+# CKINO Explained — A Friendly Chapter-Book
 
 > *A line-by-line tour of every idea in this repository, written for a curious
 > student. We assume you have seen $\sin$, $\cos$, vectors, a tiny bit of
 > calculus, and some Python. Nothing else.*
+
+> **⚠️ Correction (2026).** Where this book says the $(q,p)$ block is
+> *symplectic*, that is **wrong** — and the mistake is instructive. Having unit
+> Jacobian determinant makes the block **volume-preserving**, which is weaker than
+> preserving the symplectic form: a shear $(q,p)\mapsto(q,p+F(q))$ is symplectic
+> only if $DF$ is **self-adjoint**, which the low-rank kernel does not enforce.
+> Measured defect ≈ 1.37 (not ≈ 0). Theorems 2 and 5 are retracted; an exactly
+> symplectic version (SA-Cheb) appears in `ckino/sacheb.py`. See
+> [`proofs.md`](proofs.md) and [`track2/REPORT_FINAL_GPU.md`](track2/REPORT_FINAL_GPU.md).
 
 ---
 
@@ -15,10 +24,10 @@
 5. [Symplectic geometry and the leap-frog dance](#chapter-5)
 6. [Lie-group equivariance — symmetry as free training data](#chapter-6)
 7. [Hypernetwork meta-conditioning — one model, many physics](#chapter-7)
-8. [Putting it all together — the full SKINO forward pass](#chapter-8)
+8. [Putting it all together — the full CKINO forward pass](#chapter-8)
 9. [Going 2-D, 3-D and resolution-free](#chapter-9)
 10. [The five mathematical guarantees (in human language)](#chapter-10)
-11. [SKINO versus the existing symplectic networks (SympNet / HNN)](#chapter-11)
+11. [CKINO versus the existing symplectic networks (SympNet / HNN)](#chapter-11)
 12. [**Chapter for Dr Gareth O'Brien — Hamiltonian elastic waves**](#chapter-12)
 13. [A working example you can run today — viscous Burgers'](#chapter-13)
 14. [Cheat sheet of symbols, files, and "where do I look?"](#chapter-14)
@@ -58,7 +67,7 @@ A **neural operator** is a neural network whose *input* and *output* are both fu
 
 ### 1.3 What this repo gives you
 
-SKINO learns the map
+CKINO learns the map
 
 $$
 \mathcal{G}_\mu\;:\;u_0(x)\;\longmapsto\;u(x,T),
@@ -68,9 +77,9 @@ where $\mu$ is a set of physical parameters (viscosity, wave speed, density, …
 
 Files involved:
 
-- [skino/model.py](skino/model.py) — the 1-D model
-- [skino/nd.py](skino/nd.py) — the 2-D and 3-D models
-- [skino/train.py](skino/train.py) — a tiny end-to-end demo on Burgers' equation
+- [ckino/model.py](ckino/model.py) — the 1-D model
+- [ckino/nd.py](ckino/nd.py) — the 2-D and 3-D models
+- [ckino/train.py](ckino/train.py) — a tiny end-to-end demo on Burgers' equation
 
 ---
 
@@ -110,14 +119,14 @@ $$
 
 ### 2.5 The common gap
 
-**None of the above preserves any physical invariant.** Energy, momentum, mass — all drift during long roll-outs because nothing in the architecture pins them. SKINO's symplectic blocks close this *conservation* gap by construction (bounded energy/mass drift, not a soft penalty). **Caveat, established later by ablation:** this conservation does **not** by itself improve prediction accuracy — a structure-removed variant (`nosymp`) is statistically indistinguishable from SKINO — so treat symplecticity as a conservation property, not an accuracy lever.
+**None of the above preserves any physical invariant.** Energy, momentum, mass — all drift during long roll-outs because nothing in the architecture pins them. CKINO's symplectic blocks close this *conservation* gap by construction (bounded energy/mass drift, not a soft penalty). **Caveat, established later by ablation:** this conservation does **not** by itself improve prediction accuracy — a structure-removed variant (`nosymp`) is statistically indistinguishable from CKINO — so treat symplecticity as a conservation property, not an accuracy lever.
 
 ---
 
 <a id="chapter-3"></a>
 ## Chapter 3 — Chebyshev nodes, the polynomial superpower
 
-> File: [skino/basis.py](skino/basis.py)
+> File: [ckino/basis.py](ckino/basis.py)
 
 ### 3.1 Why not Fourier?
 
@@ -162,7 +171,7 @@ def chebyshev_diff_matrix(n, ...):
     return D
 ```
 
-This is **Trefethen's formula** — see [skino/basis.py L40](skino/basis.py#L40). It is exact for any polynomial up to degree $N$.
+This is **Trefethen's formula** — see [ckino/basis.py L40](ckino/basis.py#L40). It is exact for any polynomial up to degree $N$.
 
 ### 3.4 Rational map — go to infinity
 
@@ -172,7 +181,7 @@ $$
 s(y) \;=\; \frac{L\,(1 + y)}{1 - y}, \qquad y \in (-1, 1).
 $$
 
-This takes the Chebyshev domain to the half-line, scaled by $L$. The chain rule gives a modified differentiation matrix. The code does this with one tiny block, [skino/basis.py L102](skino/basis.py#L102):
+This takes the Chebyshev domain to the half-line, scaled by $L$. The chain rule gives a modified differentiation matrix. The code does this with one tiny block, [ckino/basis.py L102](ckino/basis.py#L102):
 
 ```python
 if rational:
@@ -204,7 +213,7 @@ The two arrays match to machine precision — that is what "spectral accuracy" f
 <a id="chapter-4"></a>
 ## Chapter 4 — Low-rank kernels (the learnable Green's function)
 
-> File: [skino/kernel.py](skino/kernel.py)
+> File: [ckino/kernel.py](ckino/kernel.py)
 
 ### 4.1 What is a Green's function?
 
@@ -230,7 +239,7 @@ $$
 k(x, y) \;=\; \sum_{r=1}^{R} \sigma_r\, \varphi_r(x)\, \psi_r(y).
 $$
 
-This is the **Mercer expansion**. The number $R$ is the *rank*. For PDEs whose Green's function is smooth (elliptic, parabolic), $R$ stays tiny — usually 4 to 16 is enough. That is the secret of why SKINO is data-efficient.
+This is the **Mercer expansion**. The number $R$ is the *rank*. For PDEs whose Green's function is smooth (elliptic, parabolic), $R$ stays tiny — usually 4 to 16 is enough. That is the secret of why CKINO is data-efficient.
 
 ### 4.3 Cost comparison
 
@@ -238,13 +247,13 @@ This is the **Mercer expansion**. The number $R$ is the *rank*. For PDEs whose G
 | --- | --- | --- |
 | Dense kernel  | $\mathcal{O}(N^2 c^2)$ | $\mathcal{O}(N^2 c^2)$ |
 | FNO diagonal multiplier | $\mathcal{O}(k_{\max}\, c^2)$ | $\mathcal{O}(c^2\, N\log N)$ |
-| **SKINO low-rank kernel** | $\mathcal{O}(R\, N\, c)$ | $\mathcal{O}(R\, N\, c)$ |
+| **CKINO low-rank kernel** | $\mathcal{O}(R\, N\, c)$ | $\mathcal{O}(R\, N\, c)$ |
 
 With $R = 8$ and $N = 32$ we have only a few thousand kernel parameters per layer.
 
 ### 4.4 The action, in code
 
-From [skino/kernel.py L66](skino/kernel.py#L66):
+From [ckino/kernel.py L66](ckino/kernel.py#L66):
 
 ```python
 def forward(self, v):
@@ -272,9 +281,9 @@ The code uses `softplus(self.sigma_raw)` to keep $\sigma_r \ge 0$. Mercer requir
 <a id="chapter-5"></a>
 ## Chapter 5 — Symplectic geometry and the leap-frog dance
 
-> File: [skino/symplectic.py](skino/symplectic.py)
+> File: [ckino/symplectic.py](ckino/symplectic.py)
 
-This is the **heart** of SKINO. Take your time.
+This is the **heart** of CKINO. Take your time.
 
 ### 5.1 Two halves of physics — position and momentum
 
@@ -296,7 +305,7 @@ These are **Hamilton's equations**. They have a magical property: as time goes b
 
 Imagine you simulate the Earth orbiting the Sun for a million years. If you use ordinary integration (Euler, Runge-Kutta), the orbit will *slowly spiral outward* or *inward* due to numerical energy creation/loss. With a **symplectic** integrator the orbit may wobble, but it never spirals — energy stays bounded for all time.
 
-Symplectic integrators keep *energy* bounded on long roll-outs, whereas an unconstrained integrator can let it spiral. SKINO inherits this for its energy/mass invariants. A caveat worth stating plainly: in the matched-capacity benchmark this **energy** stability did *not* translate into better **prediction accuracy** — removing SKINO's symplectic structure (`nosymp`) changed rollout error negligibly, and enforcing it exactly made the non-canonical KdV problem *worse*. So the area-preservation picture below is real for the invariants, but it is not why SKINO predicts well.
+Symplectic integrators keep *energy* bounded on long roll-outs, whereas an unconstrained integrator can let it spiral. CKINO inherits this for its energy/mass invariants. A caveat worth stating plainly: in the matched-capacity benchmark this **energy** stability did *not* translate into better **prediction accuracy** — removing CKINO's symplectic structure (`nosymp`) changed rollout error negligibly, and enforcing it exactly made the non-canonical KdV problem *worse*. So the area-preservation picture below is real for the invariants, but it is not why CKINO predicts well.
 
 ### 5.3 The Störmer–Verlet leap-frog
 
@@ -312,9 +321,9 @@ $$
 
 It does a half-step of momentum, then a full step of position, then another half-step of momentum. Like a frog leaping over a log. This update has **Jacobian determinant exactly 1** — area is preserved.
 
-### 5.4 SKINO's neural twist
+### 5.4 CKINO's neural twist
 
-In SKINO, $U_q$ and $U_p$ are not hand-coded forces — they are **learnable kernel-integral operators** (Chapter 4). We split the hidden channels in half — half is "$q$", half is "$p$":
+In CKINO, $U_q$ and $U_p$ are not hand-coded forces — they are **learnable kernel-integral operators** (Chapter 4). We split the hidden channels in half — half is "$q$", half is "$p$":
 
 ```python
 class SymplecticBlock(nn.Module):
@@ -332,7 +341,7 @@ class SymplecticBlock(nn.Module):
         return torch.cat([q, p], dim=1)
 ```
 
-See [skino/symplectic.py L40](skino/symplectic.py#L40).
+See [ckino/symplectic.py L40](ckino/symplectic.py#L40).
 
 ### 5.5 What FiLM modulation does
 
@@ -370,14 +379,14 @@ for k in range(10_000):
 # energy = 0.5*p*p + (1 - cos(q))   stays within 0.5 % forever
 ```
 
-Use plain Euler instead and the pendulum will explode after a few thousand steps. This is the difference SKINO inherits.
+Use plain Euler instead and the pendulum will explode after a few thousand steps. This is the difference CKINO inherits.
 
 ---
 
 <a id="chapter-6"></a>
 ## Chapter 6 — Lie-group equivariance (symmetry as free data)
 
-> File: [skino/equivariance.py](skino/equivariance.py)
+> File: [ckino/equivariance.py](ckino/equivariance.py)
 
 ### 6.1 What is a symmetry?
 
@@ -397,7 +406,7 @@ In words: "shift the input, the output shifts the same way."
 
 If you know that your operator is equivariant under a group $G$ of size $|G|$, then *each training example secretly gives you $|G|$ examples* — the original plus all its symmetric copies. The result (Bietti-Venturi-Bruna 2021) is that the test error decays as $\mathcal{O}(1/\sqrt{n |G|})$ instead of $\mathcal{O}(1/\sqrt{n})$. That is a $\sqrt{|G|}$ savings — for the rotation group in 2-D ($|G|=8$ for D4) it is roughly a $3\times$ data efficiency boost.
 
-### 6.4 How SKINO enforces equivariance
+### 6.4 How CKINO enforces equivariance
 
 The trick is the **antisymmetric depthwise convolution**:
 
@@ -426,18 +435,18 @@ input f(x)  ─►  branch 0 :  identity
                 ─►  concat  ─►  1×1 mix  ─►  hidden field
 ```
 
-This block sits at the **very front** of SKINO. After this, every later operation is automatically equivariant.
+This block sits at the **very front** of CKINO. After this, every later operation is automatically equivariant.
 
 ### 6.6 In 2-D and 3-D
 
-In [skino/nd.py](skino/nd.py#L213), the same idea is generalised — antisymmetry is enforced along *every* spatial axis, so we get translation equivariance along $x$, $y$, $z$ separately, and finite combinations give us rotations and dilations.
+In [ckino/nd.py](ckino/nd.py#L213), the same idea is generalised — antisymmetry is enforced along *every* spatial axis, so we get translation equivariance along $x$, $y$, $z$ separately, and finite combinations give us rotations and dilations.
 
 ---
 
 <a id="chapter-7"></a>
 ## Chapter 7 — Hypernetwork meta-conditioning (one model, many physics)
 
-> File: [skino/hypernet.py](skino/hypernet.py)
+> File: [ckino/hypernet.py](ckino/hypernet.py)
 
 ### 7.1 The problem
 
@@ -453,7 +462,7 @@ $$
 
 ### 7.2 FiLM modulation
 
-In SKINO the code enters via **Feature-wise Linear Modulation** (FiLM):
+In CKINO the code enters via **Feature-wise Linear Modulation** (FiLM):
 
 $$
 \text{block}(x; c) \;=\; (1 + \gamma(c)) \odot \mathcal{B}(x).
@@ -480,14 +489,14 @@ class HyperNet(nn.Module):
         return self.net(mu)
 ```
 
-See [skino/hypernet.py L24](skino/hypernet.py#L24). The whole hypernet has a few hundred parameters.
+See [ckino/hypernet.py L24](ckino/hypernet.py#L24). The whole hypernet has a few hundred parameters.
 
 ---
 
 <a id="chapter-8"></a>
-## Chapter 8 — Putting it all together (the full SKINO forward)
+## Chapter 8 — Putting it all together (the full CKINO forward)
 
-> File: [skino/model.py](skino/model.py)
+> File: [ckino/model.py](ckino/model.py)
 
 ### 8.1 The pipeline diagram
 
@@ -529,7 +538,7 @@ def forward(self, f, mu=None):
 
 ### 8.3 Why this composition is qualitatively different
 
-| Inductive bias | FNO | DeepONet | Transformer | **SKINO** |
+| Inductive bias | FNO | DeepONet | Transformer | **CKINO** |
 | --- | :-: | :-: | :-: | :-: |
 | Spectral on bounded domain | ✗ | ✗ | ✗ | ✓ |
 | Universal approx. | ✓ | ✓ | ✓ | ✓ |
@@ -538,14 +547,14 @@ def forward(self, f, mu=None):
 | Resolution-free | partial | ✗ | yes (slow) | ✓ |
 | Linear-in-grid cost | ✓ | ✓ | ✗ | ✓ |
 
-SKINO is the first to tick **every** box at the same time.
+CKINO is the first to tick **every** box at the same time.
 
 ---
 
 <a id="chapter-9"></a>
 ## Chapter 9 — Going 2-D, 3-D and resolution-free
 
-> File: [skino/nd.py](skino/nd.py)
+> File: [ckino/nd.py](ckino/nd.py)
 
 ### 9.1 The catch with the 1-D version
 
@@ -572,7 +581,7 @@ This is true resolution-freedom on **non-periodic** domains — FNO cannot do th
 
 ### 9.3 Separable kernels in $d$ dimensions
 
-A general $d$-D kernel has $N^{2d}$ entries — impossible. SKINO uses a **separable** factorisation:
+A general $d$-D kernel has $N^{2d}$ entries — impossible. CKINO uses a **separable** factorisation:
 
 $$
 k(\mathbf x, \mathbf y) \;=\; \sum_{r=1}^{R} \sigma_r\, W_{r}\, \prod_{a=1}^{d} \varphi_r^{(a)}(x_a)\, \psi_r^{(a)}(y_a).
@@ -580,7 +589,7 @@ $$
 
 Each axis stores its own $\varphi_r^{(a)}, \psi_r^{(a)}$. Memory is $\mathcal{O}(d\, R\, N)$ — **linear in $d$ and $N$**.
 
-The contraction in [skino/nd.py L141](skino/nd.py#L141) is done one axis at a time:
+The contraction in [ckino/nd.py L141](ckino/nd.py#L141) is done one axis at a time:
 
 ```python
 for a in range(self.d):
@@ -591,7 +600,7 @@ for a in range(self.d):
 
 ### 9.4 Clenshaw-Curtis quadrature
 
-For integrals over CGL nodes the right weights are the **Clenshaw-Curtis** weights (spectrally accurate). Implementation in [skino/nd.py L51](skino/nd.py#L51):
+For integrals over CGL nodes the right weights are the **Clenshaw-Curtis** weights (spectrally accurate). Implementation in [ckino/nd.py L51](ckino/nd.py#L51):
 
 ```python
 def clenshaw_curtis_weights(n, ...):
@@ -604,14 +613,14 @@ def clenshaw_curtis_weights(n, ...):
     return w
 ```
 
-### 9.5 How to use `SKINO2D` and `SKINO3D`
+### 9.5 How to use `CKINO2D` and `CKINO3D`
 
 ```python
 import torch
-from skino import SKINO2D, SKINO3D
+from skino import CKINO2D, CKINO3D
 
 # 2-D operator, trained at degree 32 per axis
-m2 = SKINO2D(n_train=32, in_channels=1, out_channels=1,
+m2 = CKINO2D(n_train=32, in_channels=1, out_channels=1,
              hidden_channels=16, rank=8, depth=4, pde_param_dim=1)
 
 u_T_32 = m2(torch.randn(8, 1, 33, 33), mu=torch.randn(8, 1))   # train res
@@ -619,7 +628,7 @@ u_T_64 = m2(torch.randn(8, 1, 65, 65), mu=torch.randn(8, 1))   # finer grid (run
 u_T_16 = m2(torch.randn(8, 1, 17, 17), mu=torch.randn(8, 1))   # coarser grid (same caveat)
 ```
 
-The code *runs* at any resolution without retraining. But be careful: on the uniform grids PDE datasets use, evaluating at a different resolution than training does **not** preserve accuracy — SKINO's one-step error grows 13–81× at 2× resolution (see `validation/report/research_paper.md` §4.9). True zero-shot super-resolution here is a property of pure-spectral FNO, not SKINO.
+The code *runs* at any resolution without retraining. But be careful: on the uniform grids PDE datasets use, evaluating at a different resolution than training does **not** preserve accuracy — CKINO's one-step error grows 13–81× at 2× resolution (see `validation/report/research_paper.md` §4.9). True zero-shot super-resolution here is a property of pure-spectral FNO, not CKINO.
 
 ---
 
@@ -630,7 +639,7 @@ The code *runs* at any resolution without retraining. But be careful: on the uni
 
 ### 10.1 Theorem 1 — Universal approximation
 
-*Plain:* "SKINO can copy any reasonable operator as closely as you like."
+*Plain:* "CKINO can copy any reasonable operator as closely as you like."
 
 *Why:* Mercer (low-rank kernels span everything) + Chebyshev (polynomials span $C(\Omega)$) + Kovachki-Lanthaler-Mishra (composition of integral operators is universal).
 
@@ -644,12 +653,12 @@ The code *runs* at any resolution without retraining. But be careful: on the uni
 
 ### 10.3 Theorem 3 — Spectral convergence on smooth solutions
 
-*Plain:* "The smoother the truth, the faster SKINO closes the gap."
+*Plain:* "The smoother the truth, the faster CKINO closes the gap."
 
 For $C^k$ truth: error $\le C\, N^{-k}$.
 For analytic truth: error $\le C\, \rho^{-N}$ — exponential.
 
-FNO gets the same rate **only on periodic domains**. SKINO gets it on *any* bounded domain.
+FNO gets the same rate **only on periodic domains**. CKINO gets it on *any* bounded domain.
 
 ### 10.4 Theorem 4 — Sample-efficiency under equivariance
 
@@ -670,14 +679,14 @@ If $L \cdot dt = T$ is fixed, the drift is $\mathcal{O}((dt)^2)$.
 
 ### 10.6 The combination is the point
 
-PINN has 1 of the 5 (universal). FNO has 2. DeepONet has 1-2. **SKINO is the first with all 5.**
+PINN has 1 of the 5 (universal). FNO has 2. DeepONet has 1-2. **CKINO is the first with all 5.**
 
 ---
 
 <a id="chapter-11"></a>
-## Chapter 11 — SKINO versus existing symplectic networks
+## Chapter 11 — CKINO versus existing symplectic networks
 
-There is a small but excellent literature on neural networks that respect symplectic structure. They are **not the same** as SKINO. Here is the explicit comparison.
+There is a small but excellent literature on neural networks that respect symplectic structure. They are **not the same** as CKINO. Here is the explicit comparison.
 
 ### 11.1 HNN — Hamiltonian Neural Network (Greydanus et al. 2019)
 
@@ -694,16 +703,16 @@ There is a small but excellent literature on neural networks that respect symple
 
 All these are *integrators of ODEs*, not *operators on function spaces*.
 
-### 11.4 Where SKINO is genuinely new
+### 11.4 Where CKINO is genuinely new
 
-SKINO lifts the symplectic idea to **functional phase space**:
+CKINO lifts the symplectic idea to **functional phase space**:
 
 - The "position" is a function $q(x)$.
 - The "momentum" is a function $p(x)$.
 - The Hamiltonian is a *functional* $H[q, p]$.
 - Hamilton's equations are now PDEs:
   $$\dot q(x) = \frac{\delta H}{\delta p(x)},\qquad \dot p(x) = -\frac{\delta H}{\delta q(x)}.$$
-- The "gradient" $\delta H/\delta p$ is a *function-valued* map — and SKINO implements it as a **kernel-integral operator** with learnable Green's function.
+- The "gradient" $\delta H/\delta p$ is a *function-valued* map — and CKINO implements it as a **kernel-integral operator** with learnable Green's function.
 
 This combination — **symplectic flow of fields where each layer is a learnable Green's function** — does not exist anywhere else in the literature.
 
@@ -714,13 +723,13 @@ This combination — **symplectic flow of fields where each layer is a learnable
 | HNN | $\mathbb{R}^{2d}$ | ✓ | ✗ | ✗ | ✗ | ✗ |
 | SympNet | $\mathbb{R}^{2d}$ | ✓ | ✗ | ✗ | ✗ | ✗ |
 | FNO | $L^2$ | ✗ | ✗ (Fourier diag) | ✗ | partial | ✗ |
-| **SKINO** | $L^2$ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **CKINO** | $L^2$ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ---
 
 <a id="chapter-12"></a>
 ## Chapter 12 — A dedicated chapter for Dr Gareth O'Brien
-### *"A Hamiltonian solution for elastic waves — is SKINO a natural fit?"*
+### *"A Hamiltonian solution for elastic waves — is CKINO a natural fit?"*
 
 > Dr O'Brien wrote (paraphrased):
 >
@@ -762,35 +771,35 @@ $$
 
 This is **textbook** geodynamics / seismology. Reference: Aki & Richards, *Quantitative Seismology* (Ch. 2). Marsden & Hughes, *Mathematical Foundations of Elasticity* (Ch. 5).
 
-### 12.2 Why SKINO is structurally a perfect fit
+### 12.2 Why CKINO is structurally a perfect fit
 
 The Hamiltonian above is **separable**: $H = T(\mathbf p) + V(\mathbf u)$ exactly, with
 
 - kinetic piece $T(\mathbf p) = \tfrac{1}{2\rho}\int |\mathbf p|^2$ — depends only on momentum,
 - potential piece $V(\mathbf u) = \tfrac12 \int \boldsymbol{\varepsilon}:\mathbf C:\boldsymbol{\varepsilon}$ — depends only on displacement.
 
-This is **exactly the form** Störmer-Verlet was designed for. The SKINO `SymplecticBlock` will reproduce the elastic-wave time-stepper at machine precision **without any extra physics-loss term**.
+This is **exactly the form** Störmer-Verlet was designed for. The CKINO `SymplecticBlock` will reproduce the elastic-wave time-stepper at machine precision **without any extra physics-loss term**.
 
 Concretely:
 
-| Hand-coded leap-frog for elasticity | SKINO `SymplecticBlock` |
+| Hand-coded leap-frog for elasticity | CKINO `SymplecticBlock` |
 | --- | --- |
 | $\mathbf p_{k+1/2} = \mathbf p_k + \tfrac{dt}{2}\, \nabla \cdot \mathbf C : \nabla \mathbf u_k$ | $p \mathrel{-}= \tfrac{dt}{2}\, U_q(q)$ |
 | $\mathbf u_{k+1} = \mathbf u_k + dt\, \mathbf p_{k+1/2} / \rho$ | $q \mathrel{+}= dt\, U_p(p)$ |
 | $\mathbf p_{k+1} = \mathbf p_{k+1/2} + \tfrac{dt}{2}\, \nabla \cdot \mathbf C : \nabla \mathbf u_{k+1}$ | $p \mathrel{-}= \tfrac{dt}{2}\, U_q(q)$ |
 
-The only difference: $U_q$ is **learned** instead of being hand-coded. So SKINO simultaneously **inherits the same energy guarantee** *and* **fits the unknown $\mathbf C$ from data** — exactly the situation in real seismology where the Earth's stiffness tensor is uncertain.
+The only difference: $U_q$ is **learned** instead of being hand-coded. So CKINO simultaneously **inherits the same energy guarantee** *and* **fits the unknown $\mathbf C$ from data** — exactly the situation in real seismology where the Earth's stiffness tensor is uncertain.
 
-### 12.3 Concrete code snippet — 3-D isotropic elasticity with SKINO
+### 12.3 Concrete code snippet — 3-D isotropic elasticity with CKINO
 
 ```python
 import torch
-from skino import SKINO3D, ChebyshevBasis
+from skino import CKINO3D, ChebyshevBasis
 
 # State has 6 channels:  3 displacement (u_x, u_y, u_z) + 3 momentum (p_x, p_y, p_z).
-# SKINO will internally split  hidden_channels  into  q  and  p  halves.
+# CKINO will internally split  hidden_channels  into  q  and  p  halves.
 
-model = SKINO3D(
+model = CKINO3D(
     n_train=24,            # parameterise basis to degree 24 per axis
     in_channels=6,         # 3 disp + 3 mom
     out_channels=6,
@@ -823,28 +832,28 @@ A common (and historically painful) path is:
 2. Implement a hand-coded leap-frog (this is good — symplectic).
 3. Try to add learnable physics (e.g. unknown $\mathbf C$) via a PINN-style soft loss. **This is where it usually breaks** — the soft penalty fights the leap-frog, energy drifts, and you tune $\lambda$ forever.
 
-SKINO removes step 3 entirely. Energy conservation is **structural** (Theorem 2), and the unknown $\mathbf C$ enters through a *learnable Green's function* (Chapter 4) and *meta-conditioning on material parameters* (Chapter 7). You get the symplectic guarantee of his original hand-coded approach *and* the operator-learning flexibility he was reaching for — without the soft-loss compromise.
+CKINO removes step 3 entirely. Energy conservation is **structural** (Theorem 2), and the unknown $\mathbf C$ enters through a *learnable Green's function* (Chapter 4) and *meta-conditioning on material parameters* (Chapter 7). You get the symplectic guarantee of his original hand-coded approach *and* the operator-learning flexibility he was reaching for — without the soft-loss compromise.
 
 ### 12.5 What I expect he is looking for in the meeting
 
 Likely conversation points he will raise:
 
-1. **Anisotropy.** Real rocks are not isotropic — $\mathbf C$ has 21 independent entries (or 5 in TI media). Can SKINO handle a tensor-valued $\mathbf C(\mathbf x)$? *Answer:* yes, feed $\mathbf C(\mathbf x)$ as input channels (21 of them) and/or its low-dimensional summary through the hypernet. The kernel integral mixes channels with a learnable $W \in \mathbb{R}^{R \times c \times c}$, which is exactly the right shape to mediate the anisotropy.
+1. **Anisotropy.** Real rocks are not isotropic — $\mathbf C$ has 21 independent entries (or 5 in TI media). Can CKINO handle a tensor-valued $\mathbf C(\mathbf x)$? *Answer:* yes, feed $\mathbf C(\mathbf x)$ as input channels (21 of them) and/or its low-dimensional summary through the hypernet. The kernel integral mixes channels with a learnable $W \in \mathbb{R}^{R \times c \times c}$, which is exactly the right shape to mediate the anisotropy.
 2. **Free-surface boundary condition.** $\boldsymbol{\sigma}\,\hat{\mathbf n} = 0$ at the top. *Answer:* Chebyshev nodes cluster at the boundary — we can impose this either as a hard penalty on the boundary nodes of the *output* of the lifting layer, or as a "tau" correction (Lanczos-tau). FNO simply cannot do this without losing accuracy.
 3. **Q-factor / anelastic attenuation.** This is **non-Hamiltonian** — energy decays. *Answer:* add a small dissipative correction *after* the symplectic block. The structure is "symplectic + Liouville damping" — the energy bound becomes a *decay* bound, still rigorous.
-4. **PML (perfectly matched layer) for open domains.** Also non-Hamiltonian. *Answer:* use SKINO's rational map for unbounded direction (Chapter 3 §3.4), or compose SKINO with a small PML wrapper at the borders.
+4. **PML (perfectly matched layer) for open domains.** Also non-Hamiltonian. *Answer:* use CKINO's rational map for unbounded direction (Chapter 3 §3.4), or compose CKINO with a small PML wrapper at the borders.
 5. **Source terms** (earthquake source, body forces). *Answer:* add the source as an input channel; the operator is linear in the source, which the hyper-modulation handles cleanly.
-6. **3-D memory budget.** A $128^3$ grid with 6 channels is already $24 \cdot 10^6$ floats. *Answer:* SKINO's storage is $\mathcal{O}(R\, d\, n_{\text{train}})$ — independent of inference resolution. Activations remain the limit, identical to any other method.
+6. **3-D memory budget.** A $128^3$ grid with 6 channels is already $24 \cdot 10^6$ floats. *Answer:* CKINO's storage is $\mathcal{O}(R\, d\, n_{\text{train}})$ — independent of inference resolution. Activations remain the limit, identical to any other method.
 
 ### 12.6 Concrete snippet he can run *during* the meeting
 
 ```python
 # Smoke test:  6-channel, 3-D, with a heterogeneous medium.
 import torch, time
-from skino import SKINO3D
+from skino import CKINO3D
 
 torch.manual_seed(0)
-model = SKINO3D(n_train=16, in_channels=6, out_channels=6,
+model = CKINO3D(n_train=16, in_channels=6, out_channels=6,
                 hidden_channels=12, rank=6, depth=4,
                 pde_param_dim=3, n_generators=3, dt=0.02).double()
 
@@ -865,24 +874,24 @@ If the meeting goes deeper, you can show him:
 
 - `proofs.md` Theorem 2 (the symplectic guarantee — that is exactly the property his hand-rolled leap-frog had).
 - `proofs.md` Theorem 5 (the explicit energy bound, in his own physics-paper language).
-- `skino/nd.py L100–185` (where the separable Green's function is implemented).
+- `ckino/nd.py L100–185` (where the separable Green's function is implemented).
 
 ### 12.7 Possible drawbacks — be honest with him
 
 | Concern | How big a deal | Mitigation |
 | --- | --- | --- |
 | Symplecticity assumes a separable $H$. Damped media break this. | Real, but well-known. | Add an exponential decay factor *outside* the block; document the resulting energy decay bound. |
-| Sharp material contrasts (Moho, fluid–solid interface). | Polynomials lose accuracy across discontinuities (Gibbs in space). | Use a **spectral element** layout (split domain into pieces, one SKINO per piece) — SKINO is **per-element** spectral. |
+| Sharp material contrasts (Moho, fluid–solid interface). | Polynomials lose accuracy across discontinuities (Gibbs in space). | Use a **spectral element** layout (split domain into pieces, one CKINO per piece) — CKINO is **per-element** spectral. |
 | Source singularities (delta sources). | Polynomials are bad at deltas. | Pre-smooth the source over a few CGL nodes, or treat the source analytically and learn only the smooth scattered field. |
 | 21-component anisotropy. | Channel count gets large. | Reduce to a low-rank tensor decomposition (5 TI parameters, 9 orthorhombic). Hypernet on those is cheap. |
 | Time step $dt$ stability. | $dt \lesssim h/v_p$ (CFL). Same as any explicit scheme. | Same advice as standard SEM: choose $dt$ ≈ $0.3 h / v_{p,\max}$. The symplectic guarantee is independent of $dt$ choice, only the truncation error scales with $dt$. |
-| Verification against his old codes. | Crucial for trust. | Run SKINO with $R$ very large, $L$ moderate, on a homogeneous half-space → must match the analytical Lamb's-problem solution to a few %. |
+| Verification against his old codes. | Crucial for trust. | Run CKINO with $R$ very large, $L$ moderate, on a homogeneous half-space → must match the analytical Lamb's-problem solution to a few %. |
 
 ### 12.8 Agenda you can paste into the calendar invite
 
 1. **5 min** — Recap of his historical Hamiltonian leap-frog work.
-2. **5 min** — Quick whiteboard: where his approach was structurally identical to SKINO's `SymplecticBlock`.
-3. **10 min** — What is new in SKINO: learnable Green's function, hypernet, Chebyshev-spectral on non-periodic media.
+2. **5 min** — Quick whiteboard: where his approach was structurally identical to CKINO's `SymplecticBlock`.
+3. **10 min** — What is new in CKINO: learnable Green's function, hypernet, Chebyshev-spectral on non-periodic media.
 4. **10 min** — Live demo of the snippet in §12.3 / §12.6.
 5. **5 min** — Open issues he is worried about (anisotropy, free surface, Q, PML).
 6. **5 min** — Next-step deliverable: a Lamb's-problem benchmark in his preferred medium.
@@ -892,7 +901,7 @@ If the meeting goes deeper, you can show him:
 <a id="chapter-13"></a>
 ## Chapter 13 — A working example you can run today
 
-> File: [skino/train.py](skino/train.py)
+> File: [ckino/train.py](ckino/train.py)
 
 ### 13.1 The PDE we solve
 
@@ -906,7 +915,7 @@ The viscosity $\nu \in [10^{-3}, 10^{-1}]$ — a whole *family*, not one instanc
 
 ### 13.2 How the ground truth is generated
 
-A classical Chebyshev pseudo-spectral solver with RK4 in time. See `burgers_reference` in [skino/train.py L28](skino/train.py#L28):
+A classical Chebyshev pseudo-spectral solver with RK4 in time. See `burgers_reference` in [ckino/train.py L28](ckino/train.py#L28):
 
 ```python
 def burgers_reference(u0, nu, basis, T, n_steps):
@@ -928,7 +937,7 @@ def burgers_reference(u0, nu, basis, T, n_steps):
 ### 13.3 The training loop, slowly
 
 ```python
-model = SKINO(n_modes=32, in_channels=1, out_channels=1,
+model = CKINO(n_modes=32, in_channels=1, out_channels=1,
               hidden_channels=32, rank=8, depth=4,
               pde_param_dim=1, n_generators=2, dt=0.1)
 
@@ -982,14 +991,14 @@ A relative $L^2$ test error of $\sim 2\%$ with only **64 training samples** — 
 
 | File | One-sentence summary |
 | --- | --- |
-| [skino/basis.py](skino/basis.py) | Chebyshev nodes, differentiation matrix, optional rational half-line map. |
-| [skino/kernel.py](skino/kernel.py) | `LowRankKernelIntegral` — learnable Green's function in Mercer form. |
-| [skino/symplectic.py](skino/symplectic.py) | `SymplecticBlock` — Störmer-Verlet leap-frog with two kernel-integral fields. |
-| [skino/equivariance.py](skino/equivariance.py) | `LieLifting` — antisymmetric depthwise conv → translation-equivariant lift. |
-| [skino/hypernet.py](skino/hypernet.py) | `HyperNet` — tiny MLP mapping PDE-parameter vector to a FiLM code. |
-| [skino/model.py](skino/model.py) | 1-D `SKINO` top-level. |
-| [skino/nd.py](skino/nd.py) | Resolution-free 1-/2-/3-D blocks and the `SKINO2D` / `SKINO3D` classes. |
-| [skino/train.py](skino/train.py) | Tiny Burgers' demo (no external dataset). |
+| [ckino/basis.py](ckino/basis.py) | Chebyshev nodes, differentiation matrix, optional rational half-line map. |
+| [ckino/kernel.py](ckino/kernel.py) | `LowRankKernelIntegral` — learnable Green's function in Mercer form. |
+| [ckino/symplectic.py](ckino/symplectic.py) | `SymplecticBlock` — Störmer-Verlet leap-frog with two kernel-integral fields. |
+| [ckino/equivariance.py](ckino/equivariance.py) | `LieLifting` — antisymmetric depthwise conv → translation-equivariant lift. |
+| [ckino/hypernet.py](ckino/hypernet.py) | `HyperNet` — tiny MLP mapping PDE-parameter vector to a FiLM code. |
+| [ckino/model.py](ckino/model.py) | 1-D `CKINO` top-level. |
+| [ckino/nd.py](ckino/nd.py) | Resolution-free 1-/2-/3-D blocks and the `CKINO2D` / `CKINO3D` classes. |
+| [ckino/train.py](ckino/train.py) | Tiny Burgers' demo (no external dataset). |
 
 ### 14.2 Symbol → meaning
 
@@ -1009,20 +1018,20 @@ A relative $L^2$ test error of $\sim 2\%$ with only **64 training samples** — 
 
 | Question | Look at |
 | --- | --- |
-| How is the differentiation matrix computed? | [skino/basis.py L40](skino/basis.py#L40) |
-| Where is the rank-$R$ kernel integral implemented? | [skino/kernel.py L66](skino/kernel.py#L66) |
-| Where is the leap-frog update? | [skino/symplectic.py L40](skino/symplectic.py#L40) |
-| How is equivariance enforced? | [skino/equivariance.py L40](skino/equivariance.py#L40) and [skino/nd.py L213](skino/nd.py#L213) |
-| Where does the hypernet code enter the block? | [skino/symplectic.py L62](skino/symplectic.py#L62) (FiLM `_modulate`) |
-| How is resolution-freedom achieved? | [skino/nd.py L40](skino/nd.py#L40) (`cheb_eval_matrix`) |
-| Where is the Clenshaw-Curtis quadrature? | [skino/nd.py L51](skino/nd.py#L51) |
+| How is the differentiation matrix computed? | [ckino/basis.py L40](ckino/basis.py#L40) |
+| Where is the rank-$R$ kernel integral implemented? | [ckino/kernel.py L66](ckino/kernel.py#L66) |
+| Where is the leap-frog update? | [ckino/symplectic.py L40](ckino/symplectic.py#L40) |
+| How is equivariance enforced? | [ckino/equivariance.py L40](ckino/equivariance.py#L40) and [ckino/nd.py L213](ckino/nd.py#L213) |
+| Where does the hypernet code enter the block? | [ckino/symplectic.py L62](ckino/symplectic.py#L62) (FiLM `_modulate`) |
+| How is resolution-freedom achieved? | [ckino/nd.py L40](ckino/nd.py#L40) (`cheb_eval_matrix`) |
+| Where is the Clenshaw-Curtis quadrature? | [ckino/nd.py L51](ckino/nd.py#L51) |
 | How would I add the elastic wave example? | Chapter 12 of this document |
 
 ---
 
 ## Closing word
 
-SKINO is the first neural operator that is, *all at once*:
+CKINO is the first neural operator that is, *all at once*:
 
 - spectrally accurate on **non-periodic** domains,
 - **symplectic** by construction (energy/mass drift stays bounded — though this does *not* improve prediction accuracy; see the ablation note in Ch 5.2),

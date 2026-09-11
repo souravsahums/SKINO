@@ -1,4 +1,4 @@
-"""Train both FNO3D and SKINO3D on elm1.py trajectory data, identically.
+"""Train both FNO3D and CKINO3D on elm1.py trajectory data, identically.
 
 Usage
 -----
@@ -36,7 +36,7 @@ if ROOT not in sys.path:
 from data_utils import PairDataset, WindowDataset, compute_stats  # noqa: E402
 from fno_model import FNO3D, count_parameters  # noqa: E402
 
-from skino.nd import SKINO3D  # noqa: E402
+from ckino.nd import CKINO3D  # noqa: E402
 
 
 def parse_args(argv=None):
@@ -59,7 +59,7 @@ def parse_args(argv=None):
     p.add_argument("--skino-rank", type=int, default=8)
     p.add_argument("--skino-ntrain", type=int, default=12)
     p.add_argument("--skino-dt", type=float, default=0.1)
-    # Push-forward curriculum knobs for SKINO. K=1 is plain one-step training
+    # Push-forward curriculum knobs for CKINO. K=1 is plain one-step training
     # and matches what FNO does. K>1 enables multi-step rollout loss without
     # changing the model architecture.
     p.add_argument(
@@ -87,17 +87,17 @@ def parse_args(argv=None):
         "--only",
         choices=["fno", "skino", "both"],
         default="both",
-        help="Limit training to one model (FNO or SKINO). Use to retrain "
-             "SKINO without redoing FNO.",
+        help="Limit training to one model (FNO or CKINO). Use to retrain "
+             "CKINO without redoing FNO.",
     )
     # Apples-to-apples ablation: train FNO with the SAME push-forward
-    # curriculum SKINO uses. Saves to a distinct checkpoint and log so the
+    # curriculum CKINO uses. Saves to a distinct checkpoint and log so the
     # original `fno.pt` / `train_log.json` are preserved.
     p.add_argument(
         "--fno-pushforward",
         action="store_true",
         help="Train FNO with the same K-step push-forward curriculum as "
-             "SKINO (using --skino-unroll-schedule / --skino-unroll-batch / "
+             "CKINO (using --skino-unroll-schedule / --skino-unroll-batch / "
              "--skino-unroll-stride). Apples-to-apples ablation.",
     )
     p.add_argument(
@@ -375,7 +375,7 @@ def main(argv=None):
     fno_log: Dict = {}
     fno_pf_loaders: Dict[int, DataLoader] = {}
     if args.fno_pushforward and args.only in ("fno", "both"):
-        # Build per-K window loaders for FNO from the SAME schedule SKINO uses.
+        # Build per-K window loaders for FNO from the SAME schedule CKINO uses.
         schedule_fno = list(args.skino_unroll_schedule)
         print(f"[fno] push-forward curriculum K-schedule: {schedule_fno}  "
               f"(out-name='{args.fno_out_name}', log-name='{args.log_name}')")
@@ -394,7 +394,7 @@ def main(argv=None):
             print(f"[fno] K={K}  windows={len(wd)}  batch={bs}")
     if args.only in ("fno", "both"):
         if args.fno_pushforward:
-            # Use the SKINO push-forward routine on FNO -- identical recipe
+            # Use the CKINO push-forward routine on FNO -- identical recipe
             # (same K-schedule, same per-step MSE, same K-step BPTT).
             fno_log = fit_model_pushforward(
                 args.fno_out_name,
@@ -411,9 +411,9 @@ def main(argv=None):
     else:
         print("[fno] --only=skino: skipping FNO training (existing checkpoint preserved).")
 
-    # SKINO
-    print("\n===== SKINO3D =====")
-    skino = SKINO3D(
+    # CKINO
+    print("\n===== CKINO3D =====")
+    skino = CKINO3D(
         n_train=args.skino_ntrain,
         in_channels=6,
         out_channels=6,
@@ -454,7 +454,7 @@ def main(argv=None):
         )
         torch.save(skino.state_dict(), os.path.join(args.out_dir, "skino.pt"))
     else:
-        print("[skino] --only=fno: skipping SKINO training (existing checkpoint preserved).")
+        print("[skino] --only=fno: skipping CKINO training (existing checkpoint preserved).")
 
     cfg_record["fno_log"] = fno_log
     cfg_record["skino_log"] = skino_log

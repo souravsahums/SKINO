@@ -1,20 +1,43 @@
+> # ⚠️ CORRECTION NOTICE (2026) — this document is superseded
+>
+> Two of its load-bearing premises were later measured and found false. Read it
+> only as a record of what was believed before that measurement; the current
+> position is in [`../../track2/REPORT_FINAL_GPU.md`](../../track2/REPORT_FINAL_GPU.md)
+> and [`../../proofs.md`](../../proofs.md).
+>
+> 1. **CKINO is not symplectic.** Its block is volume-preserving but not
+>    ω-preserving; the relative symplectic defect measured from the autograd
+>    Jacobian is **≈ 1.37** at every resolution, not 10⁻⁸. The "symplectic defect"
+>    figures quoted below were computed with an unweighted form that is only valid
+>    on a uniform grid. Theorem 2 (and Theorem 5, which depended on it) are
+>    **retracted**.
+> 2. **Symplecticity does not help even when it is real.** A later operator
+>    (SA-Cheb) *is* exactly symplectic (defect 2×10⁻¹⁶). In a controlled ablation
+>    against an otherwise identical non-symplectic twin, the **non-symplectic twin
+>    is more accurate on all six 1-D problems**. The claim below that "the
+>    symplectic prior … is what saves it" is not supported.
+>
+> The surviving positive result is about the **basis**, not the geometry:
+> Chebyshev operators beat Fourier operators by 3–5× on a non-periodic Hamiltonian
+> problem, and lose on 4 of 5 periodic ones.
+
 ## Where it works best
 
-1. **Hamiltonian ODEs (Tier 1).** Harmonic oscillator, pendulum, Kepler, and even the chaotic double pendulum. SKINO's "symplectic defect" — the structural error of the learned step — is **10⁻⁸**, basically at float-32 round-off. No baseline gets anywhere near that. Phase-space orbits stay closed for hundreds of steps where MLPs visibly spiral in or out.
+1. **Hamiltonian ODEs (Tier 1).** Harmonic oscillator, pendulum, Kepler, and even the chaotic double pendulum. CKINO's "symplectic defect" — the structural error of the learned step — is **10⁻⁸**, basically at float-32 round-off. No baseline gets anywhere near that. Phase-space orbits stay closed for hundreds of steps where MLPs visibly spiral in or out.
 
-2. **Conservation-law PDEs (Tier 3, reservoir/porous flow).** This is the strongest result. Over 400 rollout steps, FNO's mass conservation error blows up to **10²⁵** (it's effectively broken). SKINO stays at **10⁻²**. That's a 27-order-of-magnitude gap on the exact quantity petroleum/CO₂-storage engineers care about.
+2. **Conservation-law PDEs (Tier 3, reservoir/porous flow).** This is the strongest result. Over 400 rollout steps, FNO's mass conservation error blows up to **10²⁵** (it's effectively broken). CKINO stays at **10⁻²**. That's a 27-order-of-magnitude gap on the exact quantity petroleum/CO₂-storage engineers care about.
 
-3. **Long-horizon stability in general.** Train one-step, roll out 200–800 steps. SKINO never goes NaN. FNO crashes on the wave equation at step 91. The ablation (`SKINO-NoSymp`, identical architecture minus the symplectic block) blows up 11 orders worse than full SKINO — proving the symplectic prior, not the operator backbone, is what saves it.
+3. **Long-horizon stability in general.** Train one-step, roll out 200–800 steps. CKINO never goes NaN. FNO crashes on the wave equation at step 91. The ablation (`CKINO-NoSymp`, identical architecture minus the symplectic block) blows up 11 orders worse than full CKINO — proving the symplectic prior, not the operator backbone, is what saves it.
 
 4. **Parameter efficiency.** 6 406 parameters vs FNO's 78 114. ~12× smaller, better long-horizon results.
 
 ## Where it doesn't work
 
-1. **KdV equation.** SKINO drifts to NaN. The reason is structural and honest: KdV is Hamiltonian, but its symplectic structure is the *Gardner bracket*, not the textbook (q, p) split. SKINO's hard channel-pair split is the **wrong geometry** for KdV. Documented as a scope limitation in §7 of the paper. Fix is non-trivial — needs a learned Poisson bracket.
+1. **KdV equation.** CKINO drifts to NaN. The reason is structural and honest: KdV is Hamiltonian, but its symplectic structure is the *Gardner bracket*, not the textbook (q, p) split. CKINO's hard channel-pair split is the **wrong geometry** for KdV. Documented as a scope limitation in §7 of the paper. Fix is non-trivial — needs a learned Poisson bracket.
 
-2. **One-step accuracy on smooth, non-symplectic problems.** A plain ResidualMLP with 20× more parameters beats SKINO on single-step error for Kepler and the double pendulum. The symplectic constraint is a *prior* — it costs you a little fitting flexibility in exchange for huge long-horizon stability. If your problem is short-time and dissipative, the prior is a tax, not a gift.
+2. **One-step accuracy on smooth, non-symplectic problems.** A plain ResidualMLP with 20× more parameters beats CKINO on single-step error for Kepler and the double pendulum. The symplectic constraint is a *prior* — it costs you a little fitting flexibility in exchange for huge long-horizon stability. If your problem is short-time and dissipative, the prior is a tax, not a gift.
 
-3. **Genuinely dissipative systems.** Anything with real friction, viscosity, or thermal coupling violates the prior. SKINO is the wrong tool there. (Most real reservoir flow is mildly dissipative, which is why §7 of the paper proposes splitting the operator into symplectic + Onsager-gradient pieces — that's the obvious next paper.)
+3. **Genuinely dissipative systems.** Anything with real friction, viscosity, or thermal coupling violates the prior. CKINO is the wrong tool there. (Most real reservoir flow is mildly dissipative, which is why §7 of the paper proposes splitting the operator into symplectic + Onsager-gradient pieces — that's the obvious next paper.)
 
 ## Is it a "next big breakthrough"?
 
@@ -30,10 +53,10 @@
 
 The honest answer is that *each individual ingredient* has prior art. The novelty is in the **specific combination** and one bridge claim:
 
-| Ingredient | Existing work | What's new in SKINO |
+| Ingredient | Existing work | What's new in CKINO |
 | --- | --- | --- |
-| Symplectic integrator inside a network | SympNet (Jin 2020), HNN (Greydanus 2019) | They're finite-dimensional only — they take a *vector* $(q,p) \in \mathbb{R}^{2n}$ and return a vector. SKINO is the **first to lift this into a resolution-agnostic neural operator** that takes a *function* $u(\cdot)$ and returns a function. |
-| Neural operators (resolution-agnostic PDE solvers) | FNO (Li 2021), DeepONet (Lu 2021), GNO (Anandkumar 2020) | None of them preserve any structure. They optimise pointwise MSE and accept whatever rollout behaviour falls out. SKINO is the **first neural operator with a provable approximate symplectic guarantee**. |
+| Symplectic integrator inside a network | SympNet (Jin 2020), HNN (Greydanus 2019) | They're finite-dimensional only — they take a *vector* $(q,p) \in \mathbb{R}^{2n}$ and return a vector. CKINO is the **first to lift this into a resolution-agnostic neural operator** that takes a *function* $u(\cdot)$ and returns a function. |
+| Neural operators (resolution-agnostic PDE solvers) | FNO (Li 2021), DeepONet (Lu 2021), GNO (Anandkumar 2020) | None of them preserve any structure. They optimise pointwise MSE and accept whatever rollout behaviour falls out. CKINO is the **first neural operator with a provable approximate symplectic guarantee**. |
 | Chebyshev–rational spectral basis | Standard in spectral element methods (Boyd 2001) | Used here as a **resolution-independent parameterisation of the kernel** rather than of the solution — this is what makes the operator transfer from N=32 training to N=128 inference with no retraining. FNO uses Fourier modes for the same purpose, but Fourier is wrong on non-periodic and non-smooth domains (porous flow, anything with shocks). |
 | FiLM hypernetwork conditioning | Perez 2018, FiLM-ed operators (Brandstetter 2022) | Used to **modulate the symplectic correction without breaking symplecticity** — initialised to zero so the model degrades gracefully to a pure symplectic step. This zero-init trick is what makes training stable. |
 | Lie-equivariant lifting | Lie-conv (Finzi 2020), E(3)-equivariant networks (Satorras 2021) | Used here for the **embedding** $u(\cdot) \to (q,p)$ so that group symmetries of the PDE (translation, scale) transfer to the latent Hamiltonian. Combined with symplecticity this gives a **double prior** — geometric + group-theoretic. |

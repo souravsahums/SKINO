@@ -1,4 +1,4 @@
-"""Validation metrics for the SKINO suite.
+"""Validation metrics for the CKINO suite.
 
 Implements the six-level validation hierarchy:
   L1 — relative L2 prediction error

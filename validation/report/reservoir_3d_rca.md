@@ -6,7 +6,7 @@ neural-operator inference for 3D reservoir simulation (100³+ cells, inputs
 saturation $S$, where the predicted $(P, S)$ at step $t$ becomes the input
 at step $t+1$).
 
-**Author:** SKINO validation team
+**Author:** CKINO validation team
 **Date:** 2026-05-14
 **Status:** RCA — actionable
 
@@ -14,14 +14,14 @@ at step $t+1$).
 
 ## 0. TL;DR
 
-| Symptom | Root cause | Will SKINO (as shipped) fix it? | Recommended fix |
+| Symptom | Root cause | Will CKINO (as shipped) fix it? | Recommended fix |
 | --- | --- | --- | --- |
 | Error grows monotonically with rollout step | **Exposure bias** (teacher-forced training vs free inference) + **non-contractive learned operator** ($L > 1$) | Partial — the symplectic prior bounds *energy* drift, which limits *some* of the growth, but does not by itself make the operator contractive | Multi-step training loss + symplectic-dissipative split + flux-form output |
-| $S > 1$ or $S < 0$ — currently fixed by `clip(S, 0, 1)` | **No architectural bound** on the output + **MSE loss** doesn't see physical infeasibility + **Gibbs overshoot** of FFT/spectral methods at sharp saturation fronts | **No** — current SKINO has no built-in box constraint on $S$ | Phase-simplex softmax head **OR** mass-conservative flux-form update with a TVD limiter (see §6) |
-| Wall-clock + memory for $100^3$ grid | FNO's full FFT at $100^3$ uses ~$8$ MB per field per layer; learnable mode tensor scales as `modes³ × channels²` | **Yes** — SKINO's low-rank Mercer kernel scales as $r·N$ instead of $N \log N · \text{modes}^d$ | None — this is where SKINO wins by construction |
-| Heterogeneous static fields (`permx`, `permz`, `poro`, …) | Most operators concatenate them as channels and lose the "this is a parameter, not a state" distinction | **Yes** — SKINO's `HyperNet` (FiLM modulation) is **designed** for exactly this | Use a 2-field SKINO + HyperNet on static parameters (see §7) |
+| $S > 1$ or $S < 0$ — currently fixed by `clip(S, 0, 1)` | **No architectural bound** on the output + **MSE loss** doesn't see physical infeasibility + **Gibbs overshoot** of FFT/spectral methods at sharp saturation fronts | **No** — current CKINO has no built-in box constraint on $S$ | Phase-simplex softmax head **OR** mass-conservative flux-form update with a TVD limiter (see §6) |
+| Wall-clock + memory for $100^3$ grid | FNO's full FFT at $100^3$ uses ~$8$ MB per field per layer; learnable mode tensor scales as `modes³ × channels²` | **Yes** — CKINO's low-rank Mercer kernel scales as $r·N$ instead of $N \log N · \text{modes}^d$ | None — this is where CKINO wins by construction |
+| Heterogeneous static fields (`permx`, `permz`, `poro`, …) | Most operators concatenate them as channels and lose the "this is a parameter, not a state" distinction | **Yes** — CKINO's `HyperNet` (FiLM modulation) is **designed** for exactly this | Use a 2-field CKINO + HyperNet on static parameters (see §7) |
 
-**One-line verdict.** SKINO directly fixes the long-term mass-drift problem
+**One-line verdict.** CKINO directly fixes the long-term mass-drift problem
 that makes FNO unusable past ~50 steps on conservation-law PDEs. It does
 **not** by itself enforce $S \in [0, 1]$ — for that you need a saturation
 head that is **structurally** bounded.  We recommend a **flux-form
@@ -81,14 +81,14 @@ invariant manifold; *learned* operators almost always have $L = 1 + \delta$
 for some $\delta > 0$.  That $\delta$ is what kills you over 500 steps.
 
 This is **architecture-agnostic**: FNO, DeepONet, UNet, Transformer-PDE,
-and even SKINO all suffer from it.  The cure is *not* a different
+and even CKINO all suffer from it.  The cure is *not* a different
 backbone, it is one or more of:
 
 | Cure | Effect on $L$ | Cost |
 | --- | --- | --- |
 | Multi-step / pushforward training loss (Brandstetter et al. 2022 [^1]) | Drives $L \to 1$ on the *predicted* manifold | 2–10× training time |
 | Scheduled noise injection on inputs (Stachenfeld et al. 2022 [^2]) | Same idea, cheaper | <2× training time |
-| **Structural** non-expansiveness (this is SKINO's job) | $L = 1$ *exactly* on the symplectic manifold | Built into the architecture, no extra cost |
+| **Structural** non-expansiveness (this is CKINO's job) | $L = 1$ *exactly* on the symplectic manifold | Built into the architecture, no extra cost |
 
 ### 2.2 Why FNO compounds worse than most
 
@@ -102,11 +102,11 @@ within ~50–100 steps.  We measured this directly in
 **FNO's mass-drift after 400 steps was $2.66 \times 10^{25}$, an effective
 arithmetic blow-up.**
 
-### 2.3 Why SKINO compounds less
+### 2.3 Why CKINO compounds less
 
-SKINO's symplectic Stoermer–Verlet block has a **closed-form**
+CKINO's symplectic Stoermer–Verlet block has a **closed-form**
 Jacobian whose singular values lie on the unit circle (Theorem 1 of the
-SKINO paper):
+CKINO paper):
 
 $$
 \bigl\|\nabla \mathcal{G}_\theta(u)\bigr\|_2 \;=\; 1 \;+\; \mathcal{O}(\text{Mercer-truncation error}).
@@ -114,7 +114,7 @@ $$
 
 So $L \approx 1 + \mathcal{O}(r^{-\alpha})$ where $r$ is the kernel rank.
 On the 1D Buckley–Leverett test (Tier 3 of this repo) this gave
-**$\Delta m_{400}^{\text{SKINO}} = 9.4 \times 10^{-3}$** — 27 orders of
+**$\Delta m_{400}^{\text{CKINO}} = 9.4 \times 10^{-3}$** — 27 orders of
 magnitude lower than FNO and stable for the entire roll-out.
 
 **Carry-over prediction for 3D reservoir ($100^3$):**
@@ -123,7 +123,7 @@ magnitude lower than FNO and stable for the entire roll-out.
   not a stability problem).
 - Step at which catastrophic divergence occurs:
   - FNO: **50–200** depending on heterogeneity.
-  - SKINO (as shipped): **never within $10^4$ steps**, but with **slowly
+  - CKINO (as shipped): **never within $10^4$ steps**, but with **slowly
     growing local error** because the saturation bound and dissipation
     are not yet handled (next section).
 
@@ -131,17 +131,17 @@ magnitude lower than FNO and stable for the entire roll-out.
 
 ## 3. Symptom 2 — $S$ exits $[0, 1]$
 
-This is the harder problem and **SKINO as shipped does not solve it**.
+This is the harder problem and **CKINO as shipped does not solve it**.
 Let us be precise about why.
 
 ### 3.1 Four independent causes — all must be addressed
 
 | Cause | Mechanism | Affects |
 | --- | --- | --- |
-| **C1.** No structural bound | Final layer is `Linear` / spectral, range = $\mathbb{R}$ | FNO, DeepONet, SKINO, every operator that doesn't pass through a bounded nonlinearity at the head |
+| **C1.** No structural bound | Final layer is `Linear` / spectral, range = $\mathbb{R}$ | FNO, DeepONet, CKINO, every operator that doesn't pass through a bounded nonlinearity at the head |
 | **C2.** MSE loss is bound-agnostic | $\|S - S^*\|_2^2$ has the same penalty at $S = 1.05$ as at $S = 0.95$ when $S^* = 1.0$ | All MSE-trained models |
-| **C3.** Gibbs / Runge phenomenon | Spectral approximation of a discontinuous front (shock, sharp gas–oil contact) produces a **fixed-amplitude** overshoot of ~9 % regardless of mesh refinement (Gibbs' theorem) | **FNO especially** (Fourier basis); SKINO partially (Chebyshev is better but not immune); finite-difference UNet not at all |
-| **C4.** Mass-conservation drift | If $\int_\Omega S\,dV$ is not conserved exactly, individual cells absorb the imbalance and can exceed bounds even with otherwise correct physics | **FNO** catastrophic; SKINO partial (mass drift bounded, not zero) |
+| **C3.** Gibbs / Runge phenomenon | Spectral approximation of a discontinuous front (shock, sharp gas–oil contact) produces a **fixed-amplitude** overshoot of ~9 % regardless of mesh refinement (Gibbs' theorem) | **FNO especially** (Fourier basis); CKINO partially (Chebyshev is better but not immune); finite-difference UNet not at all |
+| **C4.** Mass-conservation drift | If $\int_\Omega S\,dV$ is not conserved exactly, individual cells absorb the imbalance and can exceed bounds even with otherwise correct physics | **FNO** catastrophic; CKINO partial (mass drift bounded, not zero) |
 
 Your current `clip(S, 0, 1)` only addresses the *symptom* and has three
 hidden costs:
@@ -155,18 +155,18 @@ hidden costs:
 3. **Accumulates a moving boundary defect.** Cells right at $S \approx 1$
    become "sticky" — they are clipped every step and lose dynamics.
 
-### 3.2 Will SKINO's symplectic prior fix C1 / C2 / C3 / C4?
+### 3.2 Will CKINO's symplectic prior fix C1 / C2 / C3 / C4?
 
 Honest mapping:
 
-| Cause | SKINO as shipped | Why |
+| Cause | CKINO as shipped | Why |
 | --- | --- | --- |
 | C1 — no structural bound | **No** | The symplectic block enforces phase-volume preservation in the latent $(q, p)$ space, **not** a box constraint on the decoded field |
 | C2 — MSE blind to bounds | **No** | Loss is unchanged |
 | C3 — Gibbs overshoot | **Partial** | Chebyshev basis has ~10× smaller overshoot than Fourier (Boyd 2001 [^3], ch. 2), but not zero |
 | C4 — mass conservation | **Yes** | This is the Tier-3 result — 27 orders better than FNO |
 
-So SKINO gives you **C4 for free** and **C3 partial**.  C1 and C2 need an
+So CKINO gives you **C4 for free** and **C3 partial**.  C1 and C2 need an
 explicit architectural change at the saturation head.  That change is
 small (one block at the output) and is the subject of §6.
 
@@ -181,7 +181,7 @@ static parameter fields (`permx`, `permz`, `poro`, `aqlenth`, `krgc`,
 | Model | Trainable parameters | One forward pass (FP32) | One forward pass (FP16) |
 | --- | --- | --- | --- |
 | FNO-3D ($12^3$ modes, 32 channels, 4 layers) | $4 \times 12^3 \times 32^2 \approx 7.1$ M | ≈ $4 \times 100^3 \times 32 \times 4$ B $= 5.1$ GB | 2.6 GB |
-| **SKINO-3D** (rank-32 Mercer, 24 Chebyshev modes per dim, 4 layers, 2-field head) | $4 \times 32 \times 24 \times 3 \times 32^2 \approx 9.4$ M | ≈ $4 \times 100^3 \times 32 \times 4$ B $= 5.1$ GB | 2.6 GB |
+| **CKINO-3D** (rank-32 Mercer, 24 Chebyshev modes per dim, 4 layers, 2-field head) | $4 \times 32 \times 24 \times 3 \times 32^2 \approx 9.4$ M | ≈ $4 \times 100^3 \times 32 \times 4$ B $= 5.1$ GB | 2.6 GB |
 | U-Net 3D (residual, 32 channels base) | ≈ 30 M | ≈ 8 GB | 4 GB |
 
 Parameter count is **comparable** to FNO in 3D (the saving is much
@@ -196,13 +196,13 @@ inference.  This is what Sun & Choi (2023) [^4] and OpenFOAM-ML do.
 
 ---
 
-## 5. Expected performance: SKINO vs FNO on your 3D problem
+## 5. Expected performance: CKINO vs FNO on your 3D problem
 
 Extrapolated from the 1D Tier-3 result and the 2D wave-equation ablation
 (both in this repo) and the dimensional scaling of the underlying
 theorems:
 
-| Metric (over $T = 500$ steps) | FNO-3D | SKINO-3D (current) | SKINO-3D + flux-form head (§6) |
+| Metric (over $T = 500$ steps) | FNO-3D | CKINO-3D (current) | CKINO-3D + flux-form head (§6) |
 | --- | --- | --- | --- |
 | One-step rel-L2 on $P$ | $\sim 10^{-3}$ | $\sim 10^{-3}$ | $\sim 10^{-3}$ |
 | One-step rel-L2 on $S$ | $\sim 10^{-3}$ | $\sim 10^{-3}$ | $\sim 10^{-3}$ |
@@ -212,7 +212,7 @@ theorems:
 | Number of cells with $S \notin [0, 1]$ | $\sim 10^4$ per step | $\sim 10^2$ per step | **0** |
 | Need for hard clip at inference | Yes (mandatory) | Yes (advisable) | **No** |
 
-The middle column is what you would see if you dropped SKINO in as-is.
+The middle column is what you would see if you dropped CKINO in as-is.
 The right column is what you get with the one architectural change
 recommended in §6.
 
@@ -279,7 +279,7 @@ S_w, S_o, S_g = S_all[:, 0], S_all[:, 1], S_all[:, 2]
 **Cons:** does not by itself conserve total mass across cells (only
 within a cell).  Pair with Option 5 for full conservation.
 
-**Verdict:** **adopt** as the SKINO output head.  Replaces your clip
+**Verdict:** **adopt** as the CKINO output head.  Replaces your clip
 entirely.
 
 ### Option 5 — **Mass-conservative flux-form update** *(recommended for full physics)*
@@ -333,9 +333,9 @@ post-processor on an already-trained FNO.
 
 ---
 
-## 7. Proposed SKINO-3D architecture for your reservoir problem
+## 7. Proposed CKINO-3D architecture for your reservoir problem
 
-Concretely, to deploy SKINO on your $100^3$ reservoir:
+Concretely, to deploy CKINO on your $100^3$ reservoir:
 
 ```text
                   ┌────────── HyperNet (FiLM) ──────────┐
@@ -373,7 +373,7 @@ Key design choices:
    force the same head to do both.
 2. **HyperNet on static parameters.** `permx`, `permz`, `poro`, etc.
    modulate the kernel coefficients via FiLM — they are *parameters of
-   the operator*, not state.  This is exactly what the SKINO
+   the operator*, not state.  This is exactly what the CKINO
    `HyperNet` module is built for.
 3. **Pressure: keep the symplectic block as-is.** $P$ and $\partial_t P$
    form a Hamiltonian pair for the pressure-wave equation; symplecticity
@@ -397,10 +397,10 @@ Key design choices:
 
 | Phase | Action | Outcome |
 | --- | --- | --- |
-| **1 (1 wk).** | Run current FNO on a small subset ($32^3$, 5 wells, 200 steps) and log: one-step error, 200-step rollout error, mass drift, fraction of cells violating $[0,1]$ per step. | **Baseline numbers** that the SKINO-3D target must beat. |
+| **1 (1 wk).** | Run current FNO on a small subset ($32^3$, 5 wells, 200 steps) and log: one-step error, 200-step rollout error, mass drift, fraction of cells violating $[0,1]$ per step. | **Baseline numbers** that the CKINO-3D target must beat. |
 | **2 (1 wk).** | Add the **simplex-softmax saturation head** (Option 4 above) to the existing FNO. Re-train. | Measures how much improvement comes from the head alone vs the symplectic prior. |
-| **3 (2 wk).** | Extend SKINO to 3D (the `skino/nd.py` is dimension-agnostic; needs verification + a 3D Chebyshev transform). | SKINO-3D backbone working at $32^3$. |
-| **4 (1 wk).** | Add 2-field head (pressure + flux-form saturation) and HyperNet on static parameters. | Full SKINO-3D for reservoir flow. |
+| **3 (2 wk).** | Extend CKINO to 3D (the `ckino/nd.py` is dimension-agnostic; needs verification + a 3D Chebyshev transform). | CKINO-3D backbone working at $32^3$. |
+| **4 (1 wk).** | Add 2-field head (pressure + flux-form saturation) and HyperNet on static parameters. | Full CKINO-3D for reservoir flow. |
 | **5 (1 wk).** | Pushforward / multi-step training curriculum, $T: 1 \to 10$. | Removes exposure bias. |
 | **6 (1 wk).** | Scale to $100^3$ with patch-based training, batch 4–8. | Production-scale model. |
 | **7 (1 wk).** | Validate against ECLIPSE / OPM-Flow on a SPE-10 [^7] or Norne [^8] benchmark slice. | Independent third-party reference. |
@@ -409,7 +409,7 @@ Key design choices:
 
 ## 9. Honest limitations
 
-Things the recommended SKINO-3D will **still not** solve out of the box:
+Things the recommended CKINO-3D will **still not** solve out of the box:
 
 1. **Well constraint handling** (BHP vs rate control) — requires a
    constrained optimisation layer at the well cells (e.g. KKT-based or
@@ -434,17 +434,17 @@ them only to set honest expectations.
 ## 10. Conclusion
 
 - The error-accumulation problem is **fundamental to autoregressive
-  rollout**, not specific to FNO.  SKINO bounds it because the
+  rollout**, not specific to FNO.  CKINO bounds it because the
   symplectic block is **exactly non-expansive**, but exposure-bias
   training is still essential.
-- The $S \notin [0, 1]$ problem is **not solved by SKINO as shipped**.
+- The $S \notin [0, 1]$ problem is **not solved by CKINO as shipped**.
   It is solved cleanly by replacing the saturation head with a
   flux-form, simplex-softmax output (Options 4 + 5 of §6) — a
   drop-in change of one block at the output.
-- On a $100^3$ grid SKINO is **parameter-comparable** to FNO, **memory-
+- On a $100^3$ grid CKINO is **parameter-comparable** to FNO, **memory-
   comparable**, and **expected to be 2–4 orders of magnitude better at
   long-rollout mass conservation**.
-- The recommended production architecture is the one in §7: SKINO
+- The recommended production architecture is the one in §7: CKINO
   backbone + HyperNet on static parameters + dual head (unconstrained
   $P$, flux-form simplex $S$) + pushforward training.
 

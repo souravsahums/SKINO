@@ -3,7 +3,7 @@
 H(q, p) = p^2 / 2 + ω^2 q^2 / 2
 
 Exact flow is a planar rotation of period 2π/ω.  This is the cleanest
-possible Hamiltonian system; if SKINO's symplectic block cannot preserve
+possible Hamiltonian system; if CKINO's symplectic block cannot preserve
 the orbit here, nothing more elaborate will help.
 """
 from __future__ import annotations
@@ -75,16 +75,16 @@ def run() -> dict:
     epochs = 200
     results = {}
 
-    # --- SympNet (SKINO-derived) --------------------------------------------
+    # --- SympNet (CKINO-derived) --------------------------------------------
     set_global_seed(1)
     m = SympNetODE(half_dim=1, hidden=32, depth=2, dt=DT, n_steps=1)
     train_info = train_one_step_model(m, train_states, train_targets, epochs=epochs)
     info = evaluate_one_step_model(
-        "SKINO-SympNet", m, test_states, test_targets, ic, true_traj, energy, n_long, record_every
+        "CKINO-SympNet", m, test_states, test_targets, ic, true_traj, energy, n_long, record_every
     )
     info["train_time_s"] = train_info["train_time_s"]
     info["num_params"] = sum(p.numel() for p in m.parameters())
-    results["SKINO-SympNet"] = info
+    results["CKINO-SympNet"] = info
 
     # --- Non-symplectic ablation --------------------------------------------
     set_global_seed(2)

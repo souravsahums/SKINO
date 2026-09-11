@@ -1,4 +1,4 @@
-"""Generate simulator trajectories used to train FNO and SKINO.
+"""Generate simulator trajectories used to train FNO and CKINO.
 
 Wraps elm1.py: imports its CFG, overrides a few fields (no live plotting,
 deterministic seeds, output path inside HamiltonianNN/output2), and

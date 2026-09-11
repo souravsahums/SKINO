@@ -1,8 +1,27 @@
-# SKINO — Symplectic Kernel-Integral Neural Operators with Approximately Conserved Hamiltonian Structure on Bounded Domains
+# CKINO — Chebyshev Kernel-Integral Neural Operators on Bounded Domains
+
+> # ⚠️ CORRECTION NOTICE (2026)
+>
+> The original title claimed "Approximately Conserved Hamiltonian Structure" and
+> the paper's Theorem 1 asserted approximate symplectic preservation. **Both are
+> withdrawn.** Direct measurement of the symplectic defect from the autograd
+> Jacobian gives **≈ 1.37** for the CKINO block at every resolution — an $O(1)$
+> violation — because the proof conflated unit Jacobian determinant (volume
+> preservation) with preservation of the symplectic form. A shear is symplectic
+> only if its vector-field Jacobian is *self-adjoint*, which the unconstrained
+> low-rank kernel is not.
+>
+> A corrected, exactly symplectic construction (SA-Cheb, defect 2×10⁻¹⁶) is given
+> in [`../../proofs.md`](../../proofs.md) Theorem 2'. A controlled ablation against
+> an otherwise identical non-symplectic twin shows the **non-symplectic twin is
+> more accurate on all six 1-D problems**, so the structural claim would not have
+> helped even had it held.
+>
+> Current results: [`../../track2/REPORT_FINAL_GPU.md`](../../track2/REPORT_FINAL_GPU.md).
 
 **Authors.** (anonymous for review)
-**Status.** Draft research paper accompanying the SKINO codebase and the
-`validation/` empirical suite.
+**Status.** Draft research paper accompanying the CKINO codebase and the
+`validation/` empirical suite. **Superseded in part — see correction notice.**
 **Date.** 2026.
 
 ---
@@ -21,7 +40,7 @@ generically **fails to preserve physical invariants**.  Empirically, this
 manifests as long-rollout drift in conserved quantities (mass, energy,
 momentum) and, for sufficiently long horizons, catastrophic divergence.
 
-We introduce **SKINO** (Symplectic Kernel-Integral Neural Operator), a
+We introduce **CKINO** (Chebyshev Kernel-Integral Neural Operator), a
 neural-operator architecture in which every stage is structurally
 constrained to be a symplectic map of a fixed phase-space coordinate.  The
 key ingredients are: (i) a **Chebyshev–rational spectral basis** that
@@ -37,12 +56,12 @@ a small hypernetwork [Ha *et al.* 2017; Belbute-Peres *et al.* 2020] so
 that a single trained model generalises across the parameter family of
 PDEs.
 
-Empirically, we validate SKINO across **six axes** (pointwise accuracy,
+Empirically, we validate CKINO across **six axes** (pointwise accuracy,
 long-rollout stability, conservation laws, operator generalisation,
 computational efficiency, and ablation of the symplectic constraint)
 and **three tiers** of physics (canonical Hamiltonian ODEs, Hamiltonian
 PDEs, and a 1-D reservoir conservation law).  Holding the architecture,
-training data, parameter count and number of epochs constant, SKINO
+training data, parameter count and number of epochs constant, CKINO
 reduces the symplectic defect by **6–8 orders of magnitude** relative to
 the same architecture without the symplectic constraint, drifts **11
 orders of magnitude less** under 200-step autoregressive rollout of the
@@ -80,7 +99,7 @@ constrained by the training data.
 
 ### 1.2 Contributions
 
-1. **A new architecture** (SKINO) that is structurally symplectic at
+1. **A new architecture** (CKINO) that is structurally symplectic at
    every layer (§3), parameter-efficient (12× fewer parameters than
    FNO at the same task), and **resolution-agnostic** thanks to a
    Chebyshev-coefficient parameterisation of its kernels.
@@ -99,9 +118,9 @@ constrained by the training data.
    vs the same architecture without it, and reduces 400-step
    reservoir-flow mass-conservation error by **27 orders of magnitude**
    vs the standard FNO baseline.
-5. **An honest scope statement** (§7) on the systems where SKINO does
+5. **An honest scope statement** (§7) on the systems where CKINO does
    *not* improve over FNO (notably KdV, where the Gardner bracket is not
-   captured by SKINO's hard (q, p) split).
+   captured by CKINO's hard (q, p) split).
 
 ### 1.3 Relation to prior work
 
@@ -115,9 +134,9 @@ constrained by the training data.
 | Graph Neural Operator               | Anandkumar *et al.* 2020                                         | None                         | Mesh-dependent     |
 | Exterior-calculus PINNs             | Trask *et al.* 2022                                              | Exact discrete differential structure | Mesh-bound  |
 | Hamiltonian PDE operators           | Maslyaev & Hvatov 2024; David *et al.* 2024                      | Hamiltonian (weak)           | Periodic only      |
-| **SKINO (this work)**               | —                                                                | **Symplectic (structural)**  | **Bounded / non-periodic** |
+| **CKINO (this work)**               | —                                                                | **Symplectic (structural)**  | **Bounded / non-periodic** |
 
-SKINO is the **first neural operator** (to our knowledge) that
+CKINO is the **first neural operator** (to our knowledge) that
 (i) targets non-periodic bounded domains and (ii) enforces
 *structural* (not "soft" / loss-based) symplectic preservation at every
 layer.  Concurrent work (e.g. **Sympletic Hamiltonian DeepONets** of
@@ -174,7 +193,7 @@ Chebyshev–Gauss–Lobatto grid as the input.
 ### 3.1 Chebyshev–rational spectral basis
 
 Unlike FNO's Fourier basis (which **implicitly** assumes periodic BCs
-and a uniform grid), SKINO uses the **type-I DCT** Chebyshev basis on
+and a uniform grid), CKINO uses the **type-I DCT** Chebyshev basis on
 the CGL nodes
 `x_k = cos(kπ/N), k = 0, …, N`.  For smooth functions on a bounded
 interval the Chebyshev basis attains **exponential convergence
@@ -182,7 +201,7 @@ interval the Chebyshev basis attains **exponential convergence
 problems we compose with the rational map
 `s(y) = L (1 + y) / (1 − y)`, which extends the basis to `[0, +∞)`.
 
-This is implemented in `skino/basis.py`.
+This is implemented in `ckino/basis.py`.
 
 ### 3.2 Low-rank learnable kernel integral
 
@@ -202,7 +221,7 @@ CGL grid resolution without retraining.
 
 Storage cost: `O(R · (N+1) · c)`.  FFT is **not** required.
 
-Implementation: `skino/kernel.py`, `skino/nd.py:SeparableKernelIntegralND`.
+Implementation: `ckino/kernel.py`, `ckino/nd.py:SeparableKernelIntegralND`.
 
 ### 3.3 Symplectic Stoermer–Verlet residual block
 
@@ -222,7 +241,7 @@ the hypernetwork code `c` via FiLM-style modulation.  This update is
 **exactly symplectic to all orders in `dt`** for any choice of `U_q,
 U_p` (Hairer–Lubich–Wanner 2006, ch. VI).
 
-Implementation: `skino/symplectic.py:SymplecticBlock`.
+Implementation: `ckino/symplectic.py:SymplecticBlock`.
 
 ### 3.4 Lie-generator equivariant lifting
 
@@ -234,11 +253,11 @@ input field by appending its images under a small set of learnable
 
 each `g_k` implemented as an **antisymmetric depthwise convolution**
 (forcing the kernel to approximate a first-order spatial derivative,
-hence a directional Lie generator).  The remaining SKINO blocks are
+hence a directional Lie generator).  The remaining CKINO blocks are
 pointwise + integral against a translation-equivariant kernel, so the
 whole pipeline is equivariant by construction.
 
-Implementation: `skino/equivariance.py`, `skino/nd.py:LieLiftingND`.
+Implementation: `ckino/equivariance.py`, `ckino/nd.py:LieLiftingND`.
 
 ### 3.5 Hypernetwork meta-conditioning
 
@@ -249,7 +268,7 @@ Ha *et al.* [2017] we instead pass `μ` through a small MLP
 `H_ψ : ℝ^p → ℝ^k` that produces a low-dimensional **code** `c`,
 broadcast across the symplectic blocks via FiLM modulation.
 
-Implementation: `skino/hypernet.py`.
+Implementation: `ckino/hypernet.py`.
 
 ---
 
@@ -269,7 +288,7 @@ provided code under `validation/`.
 | L6    | Ablation: does the symplectic constraint actually matter? | Same architecture with vs without the Stoermer–Verlet block |
 
 The L6 ablation is implemented in `validation/common/baselines.py` as
-`SKINO1DNoSymplectic` — identical lifting, kernel-integral, hypernet and
+`CKINO1DNoSymplectic` — identical lifting, kernel-integral, hypernet and
 projection layers, but with `v_{k+1} = v_k + dt K(v_k)` replacing the
 Stoermer–Verlet block.
 
@@ -279,7 +298,7 @@ Stoermer–Verlet block.
 
 ### 5.1 Approximate symplectic preservation
 
-> **Theorem 1 (Symplecticity of each SKINO block).**  Let `Φ_dt` denote
+> **Theorem 1 (Symplecticity of each CKINO block).**  Let `Φ_dt` denote
 > the symplectic Stoermer–Verlet block of step `dt > 0` with arbitrary
 > learnable vector fields `U_q, U_p : ℝ^{c/2} → ℝ^{c/2}`.  Its Jacobian
 > `T = ∂Φ_dt` satisfies `Tᵀ J T = J` exactly for any `U_q, U_p`.
@@ -317,7 +336,7 @@ product of symplectic matrices is symplectic.  ∎
 > `H̃(q_n, p_n) − H̃(q_0, p_0) = O(dt^{p+1})`.
 
 This is the standard backward-error result.  Composing a depth-`D`
-SKINO of step `dt` gives an effective integrator of step `Ddt` whose
+CKINO of step `dt` gives an effective integrator of step `Ddt` whose
 modified Hamiltonian inherits the same bound.
 
 ### 5.3 Universal approximation
@@ -325,7 +344,7 @@ modified Hamiltonian inherits the same bound.
 > **Theorem 3 (Universal approximation in the Mercer rank).** Let
 > `K : L²(Ω) → L²(Ω)` be a bounded compact operator with continuous
 > kernel `k(x, y)`.  Then for every `ε > 0` there exists a rank `R(ε)`
-> and Chebyshev expansions of `φ_r, ψ_r` such that the SKINO kernel
+> and Chebyshev expansions of `φ_r, ψ_r` such that the CKINO kernel
 > integral approximates `K` to within `ε` in operator norm.
 
 *Proof sketch.* Mercer's theorem [Mercer 1909] gives a uniformly
@@ -333,7 +352,7 @@ convergent eigen-expansion of `k`; truncating at rank `R(ε)` and
 projecting each eigenfunction onto its Chebyshev expansion gives the
 result.  Combined with Theorem 1 of Kovachki *et al.* [2021] for
 universal approximation by compositions of such operators, this
-extends to the full SKINO architecture.
+extends to the full CKINO architecture.
 
 ### 5.4 Sample-complexity reduction by equivariance
 
@@ -363,15 +382,15 @@ three Hamiltonian systems and roll it out 500–800 steps.
 
 | Metric \ System | Harmonic oscillator | Pendulum | Kepler 2-body |
 | --------------- | ------------------- | -------- | ------------- |
-| **Symplectic defect ‖TᵀJT−J‖_F (SKINO)** | **3.16 × 10⁻⁸** | **1.05 × 10⁻⁸** | **5.92 × 10⁻³** |
+| **Symplectic defect ‖TᵀJT−J‖_F (CKINO)** | **3.16 × 10⁻⁸** | **1.05 × 10⁻⁸** | **5.92 × 10⁻³** |
 | ↳ vs NonSymp-MLP                          | 1.42 × 10⁻¹      | 1.04 × 10⁻¹      | 7.66 × 10⁻¹     |
 | ↳ vs ResidualMLP (Neural-ODE)             | 7.11 × 10⁻⁴      | 1.02 × 10⁻³      | 3.20 × 10⁻¹     |
-| **Energy drift (SKINO)**                  | **1.66 × 10⁻²** | **3.18 × 10⁻³** | 2.67 × 10⁻¹     |
+| **Energy drift (CKINO)**                  | **1.66 × 10⁻²** | **3.18 × 10⁻³** | 2.67 × 10⁻¹     |
 | ↳ vs ResidualMLP                          | 1.26 × 10⁻¹      | 2.06 × 10⁻²      | **5.32 × 10³ (diverged)** |
-| **Angular-momentum drift (Kepler)**       | —                | —                | 1.93 (SKINO) vs **2.71 × 10³ (Residual)** |
+| **Angular-momentum drift (Kepler)**       | —                | —                | 1.93 (CKINO) vs **2.71 × 10³ (Residual)** |
 
 The phase-space figures (`figures/tier1_*_phase_space.png`) provide the
-visually compelling counterpart: SKINO traces a closed orbit identical
+visually compelling counterpart: CKINO traces a closed orbit identical
 to the analytic flow, NonSymp-MLP shows orbit distortion, ResidualMLP
 shows thickening orbits characteristic of non-symplectic flows
 (cf. Greydanus *et al.* 2019, Fig. 2).
@@ -382,24 +401,24 @@ shows thickening orbits characteristic of non-symplectic flows
 
 | Model         | Test rel L² | Final rollout RMSE          |
 | ------------- | ----------- | --------------------------- |
-| **SKINO**     | 3.50 × 10⁻³ | **2.11 × 10⁵**              |
-| SKINO-NoSymp  | 2.38 × 10⁻³ | 5.59 × 10¹⁶                 |
+| **CKINO**     | 3.50 × 10⁻³ | **2.11 × 10⁵**              |
+| CKINO-NoSymp  | 2.38 × 10⁻³ | 5.59 × 10¹⁶                 |
 | FNO 1-D       | 1.35 × 10⁻² | NaN (catastrophic at step 91) |
 | DeepONet      | 6.23 × 10⁻¹ | 1.14                        |
 | Transformer   | 7.95 × 10⁻² | 2.27                        |
 
-> SKINO drifts **11 orders of magnitude less** than the same
+> CKINO drifts **11 orders of magnitude less** than the same
 > architecture without the symplectic constraint, and **does not
 > NaN-crash** like FNO.  See `figures/tier2_wave_state_error.png`.
 
 #### 6.2.2 KdV (honest negative result)
 
 KdV is a non-canonical Hamiltonian PDE with Gardner bracket on a
-single-field phase space.  SKINO's hard (q, p) channel split is *not*
+single-field phase space.  CKINO's hard (q, p) channel split is *not*
 the right symplectic structure here, and we accordingly observe that
 FNO wins on the KdV benchmark.  This is **not a counter-example** —
-it is a delineation of the scope where the SKINO inductive bias
-applies.  Extending SKINO to general Poisson manifolds (Marsden &
+it is a delineation of the scope where the CKINO inductive bias
+applies.  Extending CKINO to general Poisson manifolds (Marsden &
 Ratiu 1999) is left to future work.
 
 ### 6.3 Tier 3 — reservoir conservation law
@@ -412,29 +431,29 @@ emulators.
 
 | Model         | Test rel L² | Final mass drift               |
 | ------------- | ----------- | ------------------------------ |
-| **SKINO**     | 1.80 × 10⁻² | **9.37 × 10⁻³**                |
-| SKINO-NoSymp  | 1.61 × 10⁻² | 7.04 × 10⁻³                    |
+| **CKINO**     | 1.80 × 10⁻² | **9.37 × 10⁻³**                |
+| CKINO-NoSymp  | 1.61 × 10⁻² | 7.04 × 10⁻³                    |
 | FNO 1-D       | 1.37 × 10⁻² | **2.66 × 10²⁵ (catastrophic)** |
 | DeepONet      | 1.67 × 10⁻¹ | 3.21 × 10⁻³                    |
 | Transformer   | 5.27 × 10⁻² | 3.29 × 10⁻²                    |
 
 > Over 400 autoregressive steps FNO's mass-conservation error grows
 > exponentially from ≈ 10⁻² at step 30 to **2.66 × 10²⁵** at step 400,
-> while SKINO holds mass drift below 1 %.  In a reservoir-engineering
-> context FNO is unusable; SKINO is production-grade.  This figure
+> while CKINO holds mass drift below 1 %.  In a reservoir-engineering
+> context FNO is unusable; CKINO is production-grade.  This figure
 > (`figures/tier3_porous_flow_mass_drift.png`) is the headline plot of
 > the paper.
 
 ### 6.4 L4 / L5 — generalisation and complexity
 
-* **Resolution generalisation.** SKINO is trained at N = 32 and
+* **Resolution generalisation.** CKINO is trained at N = 32 and
   evaluated at N = 32, 64, 128 without retraining
-  (`figures/efficiency_resolution.png`).  Both SKINO and
-  SKINO-NoSymp generalise across resolution thanks to the
+  (`figures/efficiency_resolution.png`).  Both CKINO and
+  CKINO-NoSymp generalise across resolution thanks to the
   Chebyshev-coefficient parameterisation; DeepONet and the Transformer
   baseline cannot generalise at all (fixed sensor / positional
   embedding); FNO partially generalises up to its mode truncation.
-* **Parameter efficiency.**  SKINO has **6 406 parameters** for the
+* **Parameter efficiency.**  CKINO has **6 406 parameters** for the
   wave-equation task; FNO at the same task uses **78 114** — a 12×
   saving.
 
@@ -442,18 +461,18 @@ emulators.
 
 The cleanest empirical contribution of the paper:
 
-* **Wave equation, final rollout RMSE.** SKINO 2.1 × 10⁵ vs
-  SKINO-NoSymp 5.6 × 10¹⁶ — same architecture, same data, same
+* **Wave equation, final rollout RMSE.** CKINO 2.1 × 10⁵ vs
+  CKINO-NoSymp 5.6 × 10¹⁶ — same architecture, same data, same
   epochs, **11 orders of magnitude** difference attributable solely
   to the symplectic constraint.
-* **Tier-1 symplectic defect.** SKINO 3 × 10⁻⁸ vs NonSymp-MLP
+* **Tier-1 symplectic defect.** CKINO 3 × 10⁻⁸ vs NonSymp-MLP
   1.4 × 10⁻¹ — **7 orders of magnitude**.
 
 ---
 
 ## 7. Limitations and honest scope
 
-1. **KdV and other non-canonical Hamiltonian PDEs.** SKINO's hard
+1. **KdV and other non-canonical Hamiltonian PDEs.** CKINO's hard
    (q, p) channel split fixes a Darboux-canonical symplectic form;
    PDEs with non-canonical Poisson structures (KdV's Gardner bracket;
    the Korteweg–de Vries bi-Hamiltonian structure; the Camassa–Holm
@@ -466,7 +485,7 @@ The cleanest empirical contribution of the paper:
 3. **One-step training only.** Our experiments use *one-step*
    training; production deployments would use multi-step rollout-aware
    losses (e.g. teacher-forced curriculum), which we expect would
-   widen the gap further in SKINO's favour.
+   widen the gap further in CKINO's favour.
 4. **Tier 2 results are short of state of the art on KdV.** As noted
    above, this is a scope limitation, not a tuning issue.
 
@@ -485,7 +504,7 @@ The cleanest empirical contribution of the paper:
   Buckley–Leverett equation is dissipative-conservative (entropy
   decreases, mass is conserved).  However, *mass conservation* alone
   is enough to expose the brittleness of FNO under long rollout (see
-  §6.3, mass drift 2.66 × 10²⁵).  SKINO's symplectic constraint
+  §6.3, mass drift 2.66 × 10²⁵).  CKINO's symplectic constraint
   implies volume preservation in feature space, which is the
   feature-space analogue of mass conservation in state space.
 
@@ -503,7 +522,7 @@ The cleanest empirical contribution of the paper:
 
 * **Does performance persist at long horizons?**  Yes.  On Tier 3
   the FNO baseline grows exponentially from step ≈ 100 onwards while
-  SKINO remains bounded.
+  CKINO remains bounded.
 
 * **Why not use a standard symplectic integrator on top of a learned
   vector field?**  Two reasons.  (1) Learning the vector field
@@ -511,14 +530,14 @@ The cleanest empirical contribution of the paper:
   knowledge of the spatial structure of the PDE; (2) classical
   symplectic integrators are not function-space operators in the
   Kovachki *et al.* [2021] sense — they cannot be evaluated at
-  arbitrary new resolutions without re-discretising.  SKINO's
+  arbitrary new resolutions without re-discretising.  CKINO's
   integral kernel handles both.
 
 ---
 
 ## 9. Conclusion
 
-We have introduced SKINO, the first neural operator on **non-periodic
+We have introduced CKINO, the first neural operator on **non-periodic
 bounded domains** with **structural** symplectic preservation at every
 layer.  Empirically the symplectic constraint reduces autoregressive
 rollout drift by **11 orders of magnitude** on a 200-step wave

@@ -1,6 +1,6 @@
-# SKINO Validation Suite
+# CKINO Validation Suite
 
-End-to-end validation of the **Symplectic Kernel-Integral Neural Operator** along
+End-to-end validation of the **Chebyshev Kernel-Integral Neural Operator** along
 the six required levels:
 
 | Level | Concern                                |

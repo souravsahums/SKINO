@@ -97,13 +97,13 @@ def main(argv=None):
         ax.grid(True, which="both", alpha=0.3)
 
     axq.plot(t_ms, 100.0 * fq_log, color="#1f77b4", lw=2, label="FNO")
-    axq.plot(t_ms, 100.0 * sq_log, color="#d62728", lw=2, label="SKINO")
+    axq.plot(t_ms, 100.0 * sq_log, color="#d62728", lw=2, label="CKINO")
     axq.set_title("Displacement field  $q(t)$  —  wMAPE vs ground truth")
     axq.set_ylabel("wMAPE  [%]  (log scale)")
     axq.legend(loc="upper left", fontsize=9)
 
     axp.plot(t_ms, 100.0 * fp_log, color="#1f77b4", lw=2, label="FNO")
-    axp.plot(t_ms, 100.0 * sp_log, color="#d62728", lw=2, label="SKINO")
+    axp.plot(t_ms, 100.0 * sp_log, color="#d62728", lw=2, label="CKINO")
     axp.set_title("Momentum field  $p(t)$  —  wMAPE vs ground truth")
     axp.set_ylabel("wMAPE  [%]  (log scale)")
     axp.legend(loc="upper left", fontsize=9)
@@ -121,7 +121,7 @@ def main(argv=None):
 
     # ------------ Summary ------------
     rows = []
-    for name, q_arr, p_arr in [("FNO", fq, fp), ("SKINO", sq, sp)]:
+    for name, q_arr, p_arr in [("FNO", fq, fp), ("CKINO", sq, sp)]:
         sq_summary = summarise(q_arr, args.burn_in)
         sp_summary = summarise(p_arr, args.burn_in)
         rows.append((name, sq_summary, sp_summary))
@@ -160,7 +160,7 @@ def main(argv=None):
         f.write("| model | seconds for 300 autoregressive steps (CPU) |\n")
         f.write("|---|---:|\n")
         f.write(f"| FNO | {m['rollout_wall_s']['fno']:.2f} |\n")
-        f.write(f"| SKINO | {m['rollout_wall_s']['skino']:.2f} |\n")
+        f.write(f"| CKINO | {m['rollout_wall_s']['skino']:.2f} |\n")
 
     print(f"[summary] wrote {md_path}")
 

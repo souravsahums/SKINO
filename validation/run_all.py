@@ -1,4 +1,4 @@
-"""Run the entire SKINO validation suite.
+"""Run the entire CKINO validation suite.
 
 Outputs (all under ``validation/``):
 

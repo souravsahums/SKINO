@@ -2,7 +2,7 @@
 
 A self-contained reference implementation following Li et al., 2021
 ("Fourier Neural Operator for Parametric PDEs"). Used here as the
-baseline against which SKINO is compared on the 3-D elastic-lattice
+baseline against which CKINO is compared on the 3-D elastic-lattice
 trajectory data produced by elm1.py.
 
 Public API

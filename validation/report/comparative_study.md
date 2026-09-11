@@ -1,7 +1,23 @@
-# SKINO Comparative Study — Empirical Validation Across Three Tiers
+# CKINO Comparative Study — Empirical Validation Across Three Tiers
+
+> # ⚠️ CORRECTION NOTICE (2026)
+>
+> Statements in this document attributing CKINO's behaviour to a "symplectic
+> guarantee", and the reported symplectic-defect figures, are **withdrawn**. The
+> CKINO block is volume-preserving but **not** symplectic: measured relative
+> defect **≈ 1.37** (the earlier figures used an unweighted form valid only on a
+> uniform grid). Theorems 2 and 5 are retracted in
+> [`../../proofs.md`](../../proofs.md).
+>
+> A later exactly symplectic operator (SA-Cheb, defect 2×10⁻¹⁶) is *less* accurate
+> than its otherwise identical non-symplectic twin on all six 1-D problems, so the
+> causal story told here — that structure preservation drives the results — is not
+> supported. The effect that does survive is the **basis**: Chebyshev beats Fourier
+> by 3–5× on a non-periodic Hamiltonian problem and loses on 4 of 5 periodic ones.
+> Current results: [`../../track2/REPORT_FINAL_GPU.md`](../../track2/REPORT_FINAL_GPU.md).
 
 > **Scope.** This document reports the empirical study comparing the
-> **Symplectic Kernel-Integral Neural Operator (SKINO)** with four standard
+> **Chebyshev Kernel-Integral Neural Operator (CKINO)** with four standard
 > neural-operator / neural-ODE baselines on three tiers of physics:
 > canonical Hamiltonian ODEs, Hamiltonian PDEs, and a 1-D reservoir
 > conservation law.  All numbers are taken **verbatim** from
@@ -16,12 +32,12 @@
 > The later parameter-matched, multi-seed study
 > (`validation/report/research_paper.md`, `track2/REPORT_FINAL_GPU.md`)
 > **overturns two claims here**: the **resolution-generalisation** result (§6.1,
-> §7 L4) — SKINO does **not** achieve zero-shot super-resolution on uniform PDE
+> §7 L4) — CKINO does **not** achieve zero-shot super-resolution on uniform PDE
 > grids (13–81× one-step error at 2×; FNO/T-FNO are exactly invariant) — and the
 > reading of the wave-equation rollout gap as evidence that *symplecticity
 > helps*: an ablation shows the structure-removed variant is indistinguishable in
 > accuracy and exact symplecticity diverges on KdV. At matched capacity the
-> headline is **SKINO 4/7 vs T-FNO 3/7**, a problem-class-dependent tie.
+> headline is **CKINO 4/7 vs T-FNO 3/7**, a problem-class-dependent tie.
 
 ---
 
@@ -37,10 +53,10 @@ levels L1–L6 of the validation plan:
 | L3    | Conservation properties                | `energy_drift_curve`, `mass_drift_curve`, symplectic defect |
 | L4    | Out-of-distribution operator generalisation | `efficiency.json: resolution_errors`                  |
 | L5    | Computational efficiency               | `efficiency.json: inference_time_s, train_time_s, num_params, memory_bytes` |
-| L6    | Ablation studies                       | `SKINO` vs `SKINO-NoSymp` (identical except for the integrator) |
+| L6    | Ablation studies                       | `CKINO` vs `CKINO-NoSymp` (identical except for the integrator) |
 
 The L6 ablation is the cleanest test of "does the symplectic constraint
-actually help?": `SKINO-NoSymp` uses the *same lifting layer*, *same kernel
+actually help?": `CKINO-NoSymp` uses the *same lifting layer*, *same kernel
 integral*, *same hypernet*, *same projection*, *same training data*,
 *same epochs* — only the Stoermer–Verlet block is replaced by a plain
 residual block `v ← v + dt · K(v)`.
@@ -51,12 +67,12 @@ residual block `v ← v + dt · K(v)`.
 
 | Model               | Family                       | Symplectic | Resolution-agnostic |
 | ------------------- | ---------------------------- | ---------- | ------------------- |
-| **SKINO**           | this work                    | ✅ structural | ✅ (Chebyshev coeff)  |
-| SKINO-NoSymp        | this work, ablation          | ❌          | ✅                    |
+| **CKINO**           | this work                    | ✅ structural | ✅ (Chebyshev coeff)  |
+| CKINO-NoSymp        | this work, ablation          | ❌          | ✅                    |
 | FNO 1-D             | Li et al. 2021 [3]           | ❌          | ⚠️ (mode-limited)     |
 | DeepONet            | Lu et al. 2021 [2]           | ❌          | ❌ (fixed sensors)     |
 | Transformer         | Vaswani et al. 2017 [11]; Cao 2021 [12] | ❌ | ❌ (pos. embedding) |
-| SKINO-SympNet (ODE) | this work (ODE specialisation) | ✅       | n/a                  |
+| CKINO-SympNet (ODE) | this work (ODE specialisation) | ✅       | n/a                  |
 | NonSymp-MLP (ODE)   | ODE ablation                 | ❌          | n/a                  |
 | ResidualMLP (ODE)   | Neural-ODE Euler step [9]    | ❌          | n/a                  |
 
@@ -66,7 +82,7 @@ residual block `v ← v + dt · K(v)`.
 
 ### 3.1 Test set: relative L2 (L1 metric, one-step prediction)
 
-| System            | SKINO-SympNet | NonSymp-MLP | ResidualMLP |
+| System            | CKINO-SympNet | NonSymp-MLP | ResidualMLP |
 | ----------------- | ------------- | ----------- | ----------- |
 | Harmonic osc.     | **1.96 × 10⁻³** | 3.53 × 10⁻² | 2.19 × 10⁻³ |
 | Pendulum          | 1.50 × 10⁻³   | 3.24 × 10⁻² | **6.53 × 10⁻⁴** |
@@ -83,38 +99,38 @@ residual block `v ← v + dt · K(v)`.
 This is the **structural** test: a perfectly symplectic operator has
 defect zero.
 
-| System            | SKINO-SympNet  | NonSymp-MLP | ResidualMLP |
+| System            | CKINO-SympNet  | NonSymp-MLP | ResidualMLP |
 | ----------------- | -------------- | ----------- | ----------- |
 | Harmonic osc.     | **3.16 × 10⁻⁸** | 1.42 × 10⁻¹ | 7.11 × 10⁻⁴ |
 | Pendulum          | **1.05 × 10⁻⁸** | 1.04 × 10⁻¹ | 1.02 × 10⁻³ |
 | Kepler 2-body     | **5.92 × 10⁻³** | 7.66 × 10⁻¹ | 3.20 × 10⁻¹ |
 
-> **Reading:** On the two separable systems the SKINO defect is **at
+> **Reading:** On the two separable systems the CKINO defect is **at
 > machine precision** (∼10⁻⁸).  This is not an empirical accident: it
 > follows directly from Stoermer–Verlet being symplectic to all orders
 > for separable Hamiltonians (Hairer–Lubich–Wanner 2006, ch. VI [7]).
-> On Kepler (non-separable in the strict T(p)+V(q) sense) the SKINO
+> On Kepler (non-separable in the strict T(p)+V(q) sense) the CKINO
 > defect rises but is still **two orders of magnitude smaller** than
 > any non-symplectic baseline.
 
 ### 3.3 Long-rollout state error (L2 metric)
 
-| System    | Steps | SKINO-SympNet | NonSymp-MLP | ResidualMLP |
+| System    | Steps | CKINO-SympNet | NonSymp-MLP | ResidualMLP |
 | --------- | ----- | ------------- | ----------- | ----------- |
 | Harmonic  | 500   | 5.05 × 10⁻¹    | 9.72 × 10⁻¹ (≈ unbounded) | **1.08 × 10⁻¹** |
 | Pendulum  | 600   | **5.54 × 10⁻²** | 1.87 × 10⁻¹  | 2.10 × 10⁻¹ |
 | Kepler    | 800   | **1.48**       | 8.81 × 10⁻¹  | 5.37 × 10¹  (diverged) |
 
-> **Reading:** SKINO is consistently competitive **and never catastrophic**.
+> **Reading:** CKINO is consistently competitive **and never catastrophic**.
 > `ResidualMLP` wins on harmonic short-term but blows up to 53× error on
 > Kepler — a textbook *spiralling-in* of a non-symplectic flow.
-> `SKINO-SympNet` keeps angular drift bounded on Kepler while
+> `CKINO-SympNet` keeps angular drift bounded on Kepler while
 > `ResidualMLP` blows angular momentum up by a factor of **2710** (CSV
 > column `L_drift_final`).
 
 ### 3.4 Energy drift |H_t − H_0| / |H_0| (L3 metric)
 
-| System    | SKINO-SympNet | NonSymp-MLP | ResidualMLP |
+| System    | CKINO-SympNet | NonSymp-MLP | ResidualMLP |
 | --------- | ------------- | ----------- | ----------- |
 | Harmonic  | **1.66 × 10⁻²** | 2.78 × 10⁻²  | 1.26 × 10⁻¹ |
 | Pendulum  | **3.18 × 10⁻³** | 1.63 × 10⁻¹  | 2.06 × 10⁻² |
@@ -124,7 +140,7 @@ defect zero.
 
 The most visually compelling Tier-1 result is the phase-space trajectory:
 
-* `tier1_harmonic_phase_space.png` shows SKINO traces a closed orbit
+* `tier1_harmonic_phase_space.png` shows CKINO traces a closed orbit
   identical to the analytic rotation; NonSymp-MLP shows visible orbit
   distortion; ResidualMLP shows orbit thickening characteristic of
   non-symplectic drift.
@@ -138,7 +154,7 @@ Near the separatrix, even round-off errors in true integrators drive
 neighbouring trajectories apart at the Lyapunov rate.  This is the
 toughest of the Tier-1 benchmarks.
 
-| Metric                                 | SKINO-SympNet  | NonSymp-MLP | ResidualMLP |
+| Metric                                 | CKINO-SympNet  | NonSymp-MLP | ResidualMLP |
 | -------------------------------------- | -------------- | ----------- | ----------- |
 | Test rel L² (L1)                       | 3.61 × 10⁻³    | 1.23 × 10⁻²  | **5.54 × 10⁻⁴** |
 | Symplectic defect ‖TᵀJT − J‖_F (L3)   | **8.32 × 10⁻⁴** | 8.02 × 10⁻²  | 2.06 × 10⁻³ |
@@ -146,10 +162,10 @@ toughest of the Tier-1 benchmarks.
 | Energy drift final (L3)                | **4.20 × 10⁻²** | 1.44 × 10⁻¹  | 9.41 × 10⁻³ |
 | Parameters                             | **484**         | 2 788        | 10 180     |
 
-> **Reading:** SKINO simultaneously achieves (a) the lowest symplectic
+> **Reading:** CKINO simultaneously achieves (a) the lowest symplectic
 > defect — **96× lower than NonSymp-MLP** — and (b) the lowest
 > long-horizon error with **the smallest model by a factor of 5–20×**.
-> ResidualMLP gets a better one-step error than SKINO with 20× more
+> ResidualMLP gets a better one-step error than CKINO with 20× more
 > parameters but still degrades 1.2× more under long rollout — exactly
 > the over-fitting-without-structure failure mode the symplectic prior
 > defends against.  NonSymp-MLP's chaotic rollout error saturates at
@@ -165,16 +181,16 @@ toughest of the Tier-1 benchmarks.
 
 | Model         | Params | Test rel L2 (L1) | Final rollout error (L2) | Energy drift final (L3) |
 | ------------- | ------ | ---------------- | ------------------------ | ----------------------- |
-| **SKINO**     | 8 486  | **3.50 × 10⁻³** | **2.11 × 10⁵**           | **5.42 × 10⁹**           |
-| SKINO-NoSymp  | 10 438 | 2.38 × 10⁻³     | 5.59 × 10¹⁶              | 1.49 × 10³²              |
+| **CKINO**     | 8 486  | **3.50 × 10⁻³** | **2.11 × 10⁵**           | **5.42 × 10⁹**           |
+| CKINO-NoSymp  | 10 438 | 2.38 × 10⁻³     | 5.59 × 10¹⁶              | 1.49 × 10³²              |
 | FNO 1-D       | 78 114 | 1.35 × 10⁻²     | **NaN (crashed at step 91)** | NaN                |
 | DeepONet      | 29 442 | 6.23 × 10⁻¹     | 1.14                     | 6.54 × 10⁻¹              |
 | Transformer   | 18 274 | 7.95 × 10⁻²     | 2.27                     | 2.45 × 10⁻¹              |
 
 > **Headline.** Holding **architecture, training data, parameter count,
-> and epochs constant**, SKINO drifts **11 orders of magnitude less than
+> and epochs constant**, CKINO drifts **11 orders of magnitude less than
 > the non-symplectic ablation** (`5 × 10⁴` vs `1 × 10¹⁶` final state
-> RMSE).  FNO catastrophically NaN-crashes mid-rollout; SKINO never
+> RMSE).  FNO catastrophically NaN-crashes mid-rollout; CKINO never
 > NaNs.  This is the cleanest ablation we can offer that the symplectic
 > constraint is doing real work.
 
@@ -185,19 +201,19 @@ divergence rate.)
 
 | Model         | Params  | Test rel L2 | Mass drift (final) | Momentum drift (final) |
 | ------------- | ------- | ----------- | ------------------ | ---------------------- |
-| SKINO         | 12 507  | 1.02 × 10⁻¹ | NaN (drift)        | NaN                    |
-| SKINO-NoSymp  | 12 411  | 5.57 × 10⁻² | NaN                | NaN                    |
+| CKINO         | 12 507  | 1.02 × 10⁻¹ | NaN (drift)        | NaN                    |
+| CKINO-NoSymp  | 12 411  | 5.57 × 10⁻² | NaN                | NaN                    |
 | FNO 1-D       | 102 625 | **7.50 × 10⁻³** | **4.50 × 10⁻²** | **2.49 × 10⁻¹**     |
 | DeepONet      | 18 849  | 1.67 × 10⁻¹ | 2.52 × 10⁻³        | 6.04 × 10⁻³            |
 | Transformer   | 19 233  | 1.08 × 10⁻¹ | 4.15 × 10⁻¹        | 1.78                   |
 
 > **Honest scope statement.** KdV is a **non-canonical** Hamiltonian PDE
 > — its symplectic form is the Gardner bracket on a single-field phase
-> space.  SKINO's hard-wired (q, p) split into two halves of the channel
+> space.  CKINO's hard-wired (q, p) split into two halves of the channel
 > tensor is **not the right symplectic structure for KdV**, so we do
-> not expect SKINO's symplectic guarantee to help here, and it does
+> not expect CKINO's symplectic guarantee to help here, and it does
 > not.  We report this as a limitation, not as a counter-example.
-> Extending the SKINO block to general Poisson manifolds (Gay-Balmaz &
+> Extending the CKINO block to general Poisson manifolds (Gay-Balmaz &
 > Marsden 2009; Marsden & Ratiu 1999 [8]) is the natural follow-up and
 > is left for future work.
 
@@ -212,8 +228,8 @@ non-negotiable physical invariant.
 
 | Model         | Params  | Test rel L2 | Final state err (L2) | Mass drift final (L3) |
 | ------------- | ------- | ----------- | -------------------- | --------------------- |
-| **SKINO**     | 9 403   | 1.80 × 10⁻² | **7.92 × 10⁻³**      | **9.37 × 10⁻³**       |
-| SKINO-NoSymp  | 9 331   | 1.61 × 10⁻² | 7.87 × 10⁻³          | 7.04 × 10⁻³           |
+| **CKINO**     | 9 403   | 1.80 × 10⁻² | **7.92 × 10⁻³**      | **9.37 × 10⁻³**       |
+| CKINO-NoSymp  | 9 331   | 1.61 × 10⁻² | 7.87 × 10⁻³          | 7.04 × 10⁻³           |
 | FNO 1-D       | 102 625 | 1.37 × 10⁻² | **∞ (blew up)**      | **2.66 × 10²⁵**       |
 | DeepONet      | 18 849  | 1.67 × 10⁻¹ | 2.40 × 10⁻¹          | 3.21 × 10⁻³           |
 | Transformer   | 19 233  | 5.27 × 10⁻² | 3.75 × 10⁻²          | 3.29 × 10⁻²           |
@@ -221,9 +237,9 @@ non-negotiable physical invariant.
 > **Headline.** Over a 400-step rollout, FNO's mass conservation error
 > grows **exponentially** from ≈ 10⁻² at step 30 to **2.66 × 10²⁵** at
 > step 400 (i.e. it has "manufactured" 10²⁵× more oil than physical).
-> SKINO holds mass drift at 0.94 % over the entire horizon — **27
+> CKINO holds mass drift at 0.94 % over the entire horizon — **27
 > orders of magnitude better than FNO**.  In a reservoir-engineering
-> deployment FNO is unusable; SKINO is production-grade.
+> deployment FNO is unusable; CKINO is production-grade.
 
 The figure `figures/tier3_porous_flow_mass_drift.png` is the headline
 plot of the entire study: a single straight line for FNO climbing
@@ -242,35 +258,35 @@ without retraining.
 
 | Model         | err at N=32 | err at N=64 | err at N=128 | Resolution-invariant? |
 | ------------- | ----------- | ----------- | ------------ | --------------------- |
-| **SKINO**     | low         | low         | low          | ✅ (Chebyshev coeff)    |
-| SKINO-NoSymp  | low         | low         | low          | ✅                      |
+| **CKINO**     | low         | low         | low          | ✅ (Chebyshev coeff)    |
+| CKINO-NoSymp  | low         | low         | low          | ✅                      |
 | FNO           | low         | varies      | varies       | ⚠️ (mode-limited)       |
 | DeepONet      | low         | undefined   | undefined    | ❌ (fixed sensors)      |
 | Transformer   | low         | undefined   | undefined    | ❌ (pos. embedding)     |
 
-> SKINO's basis functions are parameterised in *Chebyshev-coefficient
+> CKINO's basis functions are parameterised in *Chebyshev-coefficient
 > space*, so the same trained weights can be evaluated on any
 > Chebyshev–Gauss–Lobatto grid.  DeepONet and the Transformer baseline
 > are structurally tied to their training grid.  See
 > `figures/efficiency_resolution.png`.
 >
 > **Retracted by the matched-parameter study.** This coarse Tier-suite check did
-> not catch the real behaviour: on the *uniform* grids PDE data uses, SKINO's
+> not catch the real behaviour: on the *uniform* grids PDE data uses, CKINO's
 > one-step error grows **13–81×** from N=64→128 while pure-spectral FNO/T-FNO are
-> essentially exact (`research_paper.md` §4.9). Read the "✅" for SKINO above as
+> essentially exact (`research_paper.md` §4.9). Read the "✅" for CKINO above as
 > **withdrawn**; FNO/T-FNO are the resolution-invariant models here.
 
 ### 6.2 Computational complexity (L5)
 
 | Model         | # params | Train time (50 ep, N=32) | Inference / call (median) | Memory (params) |
 | ------------- | -------- | ------------------------ | ------------------------- | --------------- |
-| **SKINO**     | 6 406    | 24.6 s                   | (see JSON)                | 25.6 KB         |
-| SKINO-NoSymp  | 7 870    | 21.0 s                   | (see JSON)                | 31.5 KB         |
+| **CKINO**     | 6 406    | 24.6 s                   | (see JSON)                | 25.6 KB         |
+| CKINO-NoSymp  | 7 870    | 21.0 s                   | (see JSON)                | 31.5 KB         |
 | FNO 1-D       | 78 114   | 22.8 s                   | (see JSON)                | 312.5 KB        |
 | DeepONet      | 29 442   | 2.9 s                    | (see JSON)                | 117.8 KB        |
 | Transformer   | 18 274   | 9.1 s                    | (see JSON)                | 73.1 KB         |
 
-> SKINO is **12× more parameter-efficient than FNO** at the same task
+> CKINO is **12× more parameter-efficient than FNO** at the same task
 > (6.4 K vs 78 K parameters) while delivering substantially better
 > rollout stability and full resolution-invariance.
 
@@ -280,23 +296,23 @@ without retraining.
 
 | Level | Metric                              | Winner         | Comment                                                 |
 | ----- | ----------------------------------- | -------------- | ------------------------------------------------------- |
-| L1    | One-step relative L2                | tied (SKINO/FNO/ResidualMLP) | All differentiable models reach < 1 % error |
-| L2    | Long-rollout state error            | **SKINO**      | 11-order-of-magnitude gap over no-symp ablation on wave |
-| L3 a  | Symplectic defect                   | **SKINO**      | 6–8 orders of magnitude below every baseline (ODEs)     |
-| L3 b  | Energy drift                        | **SKINO**      | 10× lower than baselines on harmonic / pendulum         |
-| L3 c  | Mass conservation                   | **SKINO**      | 27 orders of magnitude better than FNO on reservoir flow |
-| L4    | Resolution generalisation           | **FNO / T-FNO** | SKINO's CGL invariance does **not** transfer to uniform PDE grids (13–81× error at 2×, `research_paper.md` §4.9); earlier "SKINO ✅" retracted |
-| L5    | Parameter / memory efficiency       | **SKINO**      | 12× fewer params than FNO at higher rollout stability   |
-| L6    | Ablation (vs SKINO-NoSymp)          | **SKINO**      | Same architecture, same data — only the integrator changes |
+| L1    | One-step relative L2                | tied (CKINO/FNO/ResidualMLP) | All differentiable models reach < 1 % error |
+| L2    | Long-rollout state error            | **CKINO**      | 11-order-of-magnitude gap over no-symp ablation on wave |
+| L3 a  | Symplectic defect                   | **CKINO**      | 6–8 orders of magnitude below every baseline (ODEs)     |
+| L3 b  | Energy drift                        | **CKINO**      | 10× lower than baselines on harmonic / pendulum         |
+| L3 c  | Mass conservation                   | **CKINO**      | 27 orders of magnitude better than FNO on reservoir flow |
+| L4    | Resolution generalisation           | **FNO / T-FNO** | CKINO's CGL invariance does **not** transfer to uniform PDE grids (13–81× error at 2×, `research_paper.md` §4.9); earlier "CKINO ✅" retracted |
+| L5    | Parameter / memory efficiency       | **CKINO**      | 12× fewer params than FNO at higher rollout stability   |
+| L6    | Ablation (vs CKINO-NoSymp)          | **CKINO**      | Same architecture, same data — only the integrator changes |
 
 ---
 
-## 8. Where SKINO does **not** win — honest scope
+## 8. Where CKINO does **not** win — honest scope
 
-* **KdV.** SKINO's hard symplectic split is the wrong structure for
+* **KdV.** CKINO's hard symplectic split is the wrong structure for
   KdV's Gardner bracket; FNO is the better choice here.
 * **Single-step accuracy** on smooth ICs: with enough parameters a
-  larger ResidualMLP can fit one step better than SKINO; only under
+  larger ResidualMLP can fit one step better than CKINO; only under
   iteration does its non-symplectic structure become a problem.
 * **Wall-clock training time** is currently ≈ 25 s vs DeepONet's ≈ 3 s;
   the kernel integral is more expensive than a linear branch/trunk.

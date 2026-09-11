@@ -1,7 +1,7 @@
 # Track-2 v2 — Large-N, Long-Horizon, Multi-Operator Study
 
 **Prepared for:** Dr Gareth O'Brien
-**Question:** how do SKINO **and other neural operators** behave at long autoregressive
+**Question:** how do CKINO **and other neural operators** behave at long autoregressive
 rollout, at realistic sample counts, and does recursion itself cause the failure?
 
 ---
@@ -20,12 +20,12 @@ The five results that matter:
 2. **A flat RMS curve does not mean a good model.** Several configurations with
    stable-looking RMS plateaus are, on visual inspection, **amplitude-collapsed
    or constant predictors**. Only the predicted-vs-real snapshots exposed this.
-3. **SKINO beats FNO on all three problems, and its parameter advantage grows
+3. **CKINO beats FNO on all three problems, and its parameter advantage grows
    sharply with dimension** — 5.4–6.5× fewer parameters in 1-D, **83× fewer in
    2-D**, where it is simultaneously **11× more accurate**.
 4. **The symplectic structure contributes nothing measurable.** The
    `skino_nosymp` ablation (identical kernel/lift/projection, symplectic block
-   replaced by a plain residual block) matches or slightly *beats* full SKINO on
+   replaced by a plain residual block) matches or slightly *beats* full CKINO on
    both 1-D equations.
 5. **Noise injection is equation-dependent, and its failure mode is amplitude
    collapse.** Essential on KdV (prevents divergence); actively harmful on both
@@ -59,7 +59,7 @@ diverges, or collapses.
 Spatial resolution was held at 32 (wave) / 64 (KdV) points.
 
 If *grid* resolution was meant, it is a single flag (`--grid 512`) and the study
-can be re-run; SKINO is resolution-agnostic by construction so this is cheap.
+can be re-run; CKINO is resolution-agnostic by construction so this is cheap.
 
 ---
 
@@ -99,7 +99,7 @@ noise at 2 % of field RMS injected at every unroll step.
 ## 3. Models compared (item 5)
 
 ### 3.1 The candidate
-* **`skino`** — SKINO_ND, pseudo-symplectic kernel-integral operator.
+* **`skino`** — CKINO_ND, Chebyshev kernel-integral kernel-integral operator.
 
 ### 3.2 Other neural operators
 * **`skino_nosymp`** — *ablation*: identical Chebyshev kernel, Lie lift and
@@ -123,7 +123,7 @@ noise at 2 % of field RMS injected at every unroll step.
 | transformer | 39,698 | 41,137 |
 | fno | 136,514 | 136,449 |
 
-FNO uses **5.4–6.5× more parameters** than SKINO throughout.
+FNO uses **5.4–6.5× more parameters** than CKINO throughout.
 
 ---
 
@@ -185,7 +185,7 @@ Reading [`results_v2/snapshots_kdv.png`](results_v2/snapshots_kdv.png) and
 | config | what the snapshot actually shows | RMS reading was… |
 |---|---|---|
 | kdv `skino_noise` | **tracks the true waveform closely at every checkpoint** | ✅ honest |
-| kdv `skino_nosymp_noise` | tracks closely, visually indistinguishable from SKINO | ✅ honest |
+| kdv `skino_nosymp_noise` | tracks closely, visually indistinguishable from CKINO | ✅ honest |
 | kdv `*_plain` | **grid-scale sawtooth** filling ±3 — numerical blow-up | ✅ honest (diverged) |
 | kdv `fno_plain/noise` | right amplitude, **progressive phase drift** by t≥300 | ✅ honest |
 | kdv `*_direct` | **flat line at the mean (≈1.0)** — no spatial structure at all | ❌ 0.27–0.30 looked "stable" |
@@ -207,9 +207,9 @@ have reported them as the "most stable" models.
 **kdv:**
 `skino_noise` (0.041) ≈ `skino_nosymp_noise` (0.044) > `fno_plain` (0.059) > `transformer_noise` (0.085) ≫ direct (0.27)
 
-SKINO wins both — at 5.4–6.5× fewer parameters than FNO. One caveat in FNO's
-favour: **FNO never diverged on KdV without noise, while SKINO did.** FNO is the
-more robust operator when no stabiliser is used; SKINO is the more accurate one
+CKINO wins both — at 5.4–6.5× fewer parameters than FNO. One caveat in FNO's
+favour: **FNO never diverged on KdV without noise, while CKINO did.** FNO is the
+more robust operator when no stabiliser is used; CKINO is the more accurate one
 when the stabiliser is correctly dosed.
 
 ---
@@ -233,30 +233,30 @@ one-step operator, and with this budget it fits only the mean.
 **Implication: recursion is not the villain.** Error accumulation is a real
 problem, but removing the recursion is decisively worse than stabilising it.
 
-### 6.3 SKINO is the most parameter-efficient accurate operator, but not the most robust
-Best-recipe SKINO beats FNO on all three problems: 1-D wave (0.118 vs 0.430),
+### 6.3 CKINO is the most parameter-efficient accurate operator, but not the most robust
+Best-recipe CKINO beats FNO on all three problems: 1-D wave (0.118 vs 0.430),
 KdV (0.041 vs 0.059) and 2-D wave (0.016 vs 0.183). The parameter advantage is
-5.4–6.5× in 1-D and **83× in 2-D**, because SKINO's separable rank-R Chebyshev
+5.4–6.5× in 1-D and **83× in 2-D**, because CKINO's separable rank-R Chebyshev
 kernel scales linearly in the number of axes while FNO's spectral weights scale
 as (modes)^d. **This is the finding with the clearest path to practical value**,
 since the target problem is 3-D.
 
-However SKINO diverged on KdV without noise where FNO did not — SKINO's accuracy
+However CKINO diverged on KdV without noise where FNO did not — CKINO's accuracy
 advantage comes with a stability liability that must be managed by the recipe.
 
 ### 6.4 The symplectic structure shows no measurable benefit
 `skino_nosymp` — same kernel, same lift, same projection, symplectic block
-replaced by a plain residual block — matched SKINO on KdV (0.044 vs 0.041) and
+replaced by a plain residual block — matched CKINO on KdV (0.044 vs 0.041) and
 **beat** it on wave (0.094 vs 0.118), while also diverging in the same place
 without noise. Combined with the earlier analysis that the architecture is only
 *pseudo*-symplectic (volume-preserving, not ω-preserving, and non-symplectic
-lift/projection), the reasonable conclusion is that **SKINO's advantage comes
+lift/projection), the reasonable conclusion is that **CKINO's advantage comes
 from the Chebyshev kernel-integral parameterisation and its parameter
 efficiency, not from the symplectic block.** The "symplectic" claim in the
 project's documentation is not supported by this evidence.
 
 ### 6.5 Noise injection is equation-dependent, and over-dosing causes amplitude collapse
-* KdV: **essential** — without it both SKINO variants diverge (step 86 / 91);
+* KdV: **essential** — without it both CKINO variants diverge (step 86 / 91);
   with it they are the best models in the study.
 * wave1d: **harmful** — it converts an honestly-degrading model into an
   over-damped one that under-predicts amplitude by ~5×.
@@ -313,14 +313,14 @@ From [`results_v2/snapshots_wave2d.png`](results_v2/snapshots_wave2d.png):
 
 ### 7.3 The headline 2-D result — parameter efficiency scales with dimension
 
-| | SKINO | FNO2D | ratio |
+| | CKINO | FNO2D | ratio |
 |---|---:|---:|---|
 | parameters | 25,414 | 2,102,594 | **83× fewer** |
 | RMS @ t=100 | 0.016 | 0.183 | **11× more accurate** |
 
 The FNO parameter count explodes in 2-D because its spectral weights scale as
-(modes)^d × hidden², whereas SKINO's **separable** rank-R Chebyshev kernel scales
-linearly in the number of axes. **SKINO's efficiency advantage grows sharply with
+(modes)^d × hidden², whereas CKINO's **separable** rank-R Chebyshev kernel scales
+linearly in the number of axes. **CKINO's efficiency advantage grows sharply with
 dimension: 5.4–6.5× in 1-D → 83× in 2-D.** For a 3-D target problem this is the
 most commercially relevant finding in the study.
 

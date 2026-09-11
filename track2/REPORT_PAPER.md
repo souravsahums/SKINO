@@ -1,6 +1,6 @@
-# SKINO — Paper-Grade Experimental Report
+# CKINO — Paper-Grade Experimental Report
 
-Comprehensive comparison of SKINO against seven other neural-operator families on
+Comprehensive comparison of CKINO against seven other neural-operator families on
 a five-equation difficulty ladder plus 2-D, at **matched parameter budgets**,
 with **500-step rollouts**, **physics-aware metrics**, and **two non-recursive
 baselines**.
@@ -13,10 +13,10 @@ numeric tables), figures in [`results_paper/`](results_paper).
 ## 1. Executive summary
 
 **The headline is a mixed result, and that is the strongest version of this
-paper.** At genuinely matched parameter counts SKINO wins 4 of 7 problems and a
+paper.** At genuinely matched parameter counts CKINO wins 4 of 7 problems and a
 non-recursive/no-noise T-FNO wins the other three - a far more defensible claim
-than the earlier "SKINO wins everything", which was substantially an artefact of
-SKINO having 5-83x fewer parameters than its baselines. A second major axis is
+than the earlier "CKINO wins everything", which was substantially an artefact of
+CKINO having 5-83x fewer parameters than its baselines. A second major axis is
 the prediction mode: **one-shot (seq2seq) prediction beats autoregressive
 rollout on exactly the problems where rollout is unstable (wave1d, KdV, 2-/3-D
 wave), by 47x to five orders of magnitude, for every backbone** - while a
@@ -27,24 +27,24 @@ configuration at 3 seeds (t=200 in 1-D/2-D, t=150 in 3-D):
 
 | Problem | Best model | RMS | Winner |
 |---|---|---:|---|
-| advection | `skino_plain` | **0.00101 +/- 0.00037** | **SKINO** (recursive) |
+| advection | `skino_plain` | **0.00101 +/- 0.00037** | **CKINO** (recursive) |
 | heat | `tfno_plain` | **0.00117 +/- 0.00029** | T-FNO (recursive) |
 | wave1d | `tfno_seq2seq` | **0.00225 +/- 0.00021** | T-FNO (non-recursive) |
 | burgers | `tfno_plain` | **0.00300 +/- 0.00049** | T-FNO (recursive) |
-| kdv | `skino_seq2seq` | **0.00166 +/- 0.00060** | **SKINO** (non-recursive) |
-| wave2d | `skino_seq2seq` | **0.0872 +/- 0.0409** | **SKINO** (non-recursive) |
-| wave3d | `skino_seq2seq` | **0.1386 +/- 0.0373** | **SKINO** (non-recursive) |
+| kdv | `skino_seq2seq` | **0.00166 +/- 0.00060** | **CKINO** (non-recursive) |
+| wave2d | `skino_seq2seq` | **0.0872 +/- 0.0409** | **CKINO** (non-recursive) |
+| wave3d | `skino_seq2seq` | **0.1386 +/- 0.0373** | **CKINO** (non-recursive) |
 
 Seven results that should shape the paper:
-1. **SKINO wins 4 of 7 problems, T-FNO wins 3.** SKINO takes advection, KdV and
+1. **CKINO wins 4 of 7 problems, T-FNO wins 3.** CKINO takes advection, KdV and
    2-/3-D wave; T-FNO takes heat, wave1d and Burgers. Burgers is the diagnostic
-   loss: SKINO's Chebyshev basis cannot represent a near-discontinuity at *any*
+   loss: CKINO's Chebyshev basis cannot represent a near-discontinuity at *any*
    budget or training mode (§4.4, §4.2.1), and T-FNO handles it cleanly. This is
    problem-class-dependent superiority, not blanket superiority - and on this
-   honest accounting T-FNO is at least as strong an operator as SKINO overall.
+   honest accounting T-FNO is at least as strong an operator as CKINO overall.
 2. **Non-recursive prediction wins wherever autoregressive rollout is
    *unstable* - for every backbone.** On a noise-matched (no-noise) comparison
-   across all four backbones (SKINO, FNO, T-FNO, U-FNO), seq2seq beats its
+   across all four backbones (CKINO, FNO, T-FNO, U-FNO), seq2seq beats its
    recursive twin on wave1d and KdV - the oscillatory and dispersive problems
    where rollout accumulates or diverges - by 47x to five orders of magnitude,
    universally. On the stably contractive problems (advection, heat, Burgers)
@@ -59,22 +59,22 @@ Seven results that should shape the paper:
    symplectic to 1e-7) is statistically neutral on advection, heat, wave1d,
    burgers and 2-D wave (marginally *better* on the latter), is 2-8x worse in
    the noise-free setting, **blows up on KdV**, and in 3-D is significantly
-   worse than the pseudo-symplectic model (0.820 vs 0.533, usable horizon 15
+   worse than the Chebyshev kernel-integral model (0.820 vs 0.533, usable horizon 15
    vs 107). The symplectic claim should be dropped.
 4. **The dimensional ladder holds: 1-D -> 2-D -> 3-D all pass.** The
-   non-recursive SKINO operator is the best model at every dimensionality
+   non-recursive CKINO operator is the best model at every dimensionality
    (2-D wave 0.087 +/- 0.041, 3-D wave 0.139 +/- 0.037, both retaining a full
    usable horizon), while the parameter-matched FNO blows up in both 2-D and
    3-D.
-5. **Physics-informed (PINN) loss is a double-edged sword** - it improves SKINO
+5. **Physics-informed (PINN) loss is a double-edged sword** - it improves CKINO
    on advection/heat but makes FNO *blow up* on 2-D wave (RMS 22.4).
 6. **One-step PDE residuals are ill-conditioned for stiff equations.** Measured,
    quantified, and the reason PINN is disabled on KdV.
-7. **SKINO does not achieve zero-shot super-resolution on uniform grids.**
-   Trained at N=64 and tested at N=128 on the same fields, SKINO's one-step
+7. **CKINO does not achieve zero-shot super-resolution on uniform grids.**
+   Trained at N=64 and tested at N=128 on the same fields, CKINO's one-step
    error grows 13-81x (advection) and up to 4.3x (KdV) over 3 seeds, while
    pure-spectral FNO and T-FNO are exactly invariant (ratio ~1.00, which
-   certifies the test). SKINO's Chebyshev kernel is invariant on its native CGL
+   certifies the test). CKINO's Chebyshev kernel is invariant on its native CGL
    grid, but PDE data is uniform - so its defining theoretical property does not
    materialise in practice, and the discretisation-invariance advantage accrues
    to the Fourier operators (§4.9).
@@ -82,7 +82,7 @@ Seven results that should shape the paper:
 > The recursion claim was rewritten **five** times as the protocol tightened:
 > equal-gradient-step training (§4.5), then 3-seed repetition, then raising the
 > last single-seed configs to three seeds, then adding seq2seq arms for FNO,
-> T-FNO and U-FNO so the comparison was no longer SKINO-only - which briefly
+> T-FNO and U-FNO so the comparison was no longer CKINO-only - which briefly
 > suggested a uniform 3-165x win until the fifth pass caught that this compared
 > *noise-injected* recursive models against *no-noise* seq2seq ones. The
 > noise-matched claim (seq2seq wins where rollout is unstable, loses where it is
@@ -142,7 +142,7 @@ Every family is built to the **same budget** by searching its width/mode grid.
 
 | Family | params @25k | Description |
 |---|---:|---|
-| `skino` | 25,067 | pseudo-symplectic Chebyshev kernel-integral operator |
+| `skino` | 25,067 | Chebyshev kernel-integral Chebyshev kernel-integral operator |
 | `skino_nosymp` | 22,755 | **ablation** — same kernel/lift/projection, symplectic block → plain residual |
 | `fno` | 25,985 | Fourier Neural Operator (Li et al. 2021) |
 | `ufno` | 18,193 | U-FNO — U-Net branch inside FNO blocks (Wen et al. 2022) |
@@ -220,7 +220,7 @@ more useful exercise:
 
 | family | best result | worst result | character |
 |---|---|---|---|
-| SKINO | **0.006** (advection) | **diverges** (kdv, no noise) | highest peaks, least robust |
+| CKINO | **0.006** (advection) | **diverges** (kdv, no noise) | highest peaks, least robust |
 | T-FNO | 0.017 (heat) | 0.152 (kdv) | **never bad on any equation** |
 | U-FNO | 0.031 (heat) | 0.172 (wave1d) | consistently solid |
 | FNO | 0.101 (burgers) | 0.915 (wave2d) | mid-tier, weak in 2-D |
@@ -229,7 +229,7 @@ more useful exercise:
 | Transformer | 0.428 (heat) | 40.95 (kdv, blow-up) | weakest |
 
 **This is the most important nuance in the *recursive* survey**: among
-autoregressive models SKINO wins more problems, but **T-FNO is the operator you
+autoregressive models CKINO wins more problems, but **T-FNO is the operator you
 would deploy if you had to pick one blind**. The seq2seq result in §4.5 then
 largely dissolves this tension: a non-recursive T-FNO is both the most robust
 choice *and* competitive with the best per-problem model everywhere.
@@ -311,7 +311,7 @@ being "slightly wrong". Equivalent figures exist for all six problems.
 
 Each family swept 6k → 400k parameters at **identical training budget**.
 
-| budget | burgers SKINO | burgers FNO | kdv SKINO | kdv FNO |
+| budget | burgers CKINO | burgers FNO | kdv CKINO | kdv FNO |
 |---:|---:|---:|---:|---:|
 | 6k | 0.437 | 0.365 | 0.085 | 0.212 |
 | 25k | 0.434 | 0.262 | **0.035** | 0.095 |
@@ -320,17 +320,17 @@ Each family swept 6k → 400k parameters at **identical training budget**.
 
 Two clean conclusions:
 
-* **SKINO saturates almost immediately.** Its accuracy is essentially flat from
+* **CKINO saturates almost immediately.** Its accuracy is essentially flat from
   6k to 400k parameters on both equations — 25k is already enough. That is a
   genuine efficiency argument, and it holds at *best-vs-best*, not only at
   matched budget.
-* **SKINO's Burgers deficit is a capability limit, not a capacity limit.**
+* **CKINO's Burgers deficit is a capability limit, not a capacity limit.**
   Giving it 60× more parameters does not move it (0.437 → 0.432), while FNO
-  improves to 0.214. Conversely on KdV SKINO beats FNO **at every budget**.
+  improves to 0.214. Conversely on KdV CKINO beats FNO **at every budget**.
   The rolling-steps view (§4.2.1) makes this sharper still: on Burgers **all
-  six SKINO variants start at 0.0767-0.0775 at t=10** - indistinguishable to
+  six CKINO variants start at 0.0767-0.0775 at t=10** - indistinguishable to
   three decimal places, whether plain, noised, symplectic, strict or
-  non-recursive - while T-FNO and U-FNO start at 0.0066 and 0.0070. SKINO is
+  non-recursive - while T-FNO and U-FNO start at 0.0066 and 0.0070. CKINO is
   **11x worse from the very first checkpoint**, and every variant is pinned to
   the same value. That is the signature of a *basis* that cannot represent a
   near-discontinuity, not of a training or stability problem. No amount of
@@ -355,7 +355,7 @@ Earlier drafts compared "best recursive vs `skino_seq2seq`", which confounded th
 prediction mode with the architecture. The fair test is *within* each backbone
 **and at matched noise**: give the same operator a recursive head and a seq2seq
 head trained the same way. This matters enormously, because 2 % training-noise
-injection alone costs the recursive SKINO up to 48x accuracy on the stable
+injection alone costs the recursive CKINO up to 48x accuracy on the stable
 problems (advection 0.0010 -> 0.048) while *rescuing* it on the unstable ones
 (KdV: 1000 blow-up -> 0.046). Comparing a noise-injected recursive model against
 a no-noise seq2seq model therefore measures noise, not recursion.
@@ -365,7 +365,7 @@ vs `<bb>_seq2seq`, rel RMS at t=200, 3 seeds. Cell = winner (gap).**
 
 | backbone | advection | heat | wave1d | burgers | kdv |
 |---|---|---|---|---|---|
-| SKINO | rec (1.4x) | rec (2.0x) | **seq2seq (73x)** | tie | **seq2seq (diverges)** |
+| CKINO | rec (1.4x) | rec (2.0x) | **seq2seq (73x)** | tie | **seq2seq (diverges)** |
 | FNO | seq2seq (4.3x) | seq2seq (1.4x) | **seq2seq (47x)** | seq2seq (2.0x) | **seq2seq (28x)** |
 | T-FNO | seq2seq (4.1x) | rec (5.5x) | **seq2seq (199x)** | rec (3.4x) | **seq2seq (diverges)** |
 | U-FNO | seq2seq (5.3x) | rec (1.2x) | **seq2seq (58x)** | rec (1.2x) | **seq2seq (369x)** |
@@ -376,7 +376,7 @@ diverges - seq2seq wins for *every* backbone, by 47x to five orders of
 magnitude. On the stably contractive problems (advection, heat, burgers) the
 result is genuinely mixed and backbone-dependent: a no-noise recursive model
 frequently wins, because there the feedback loop is benign and recursion's lower
-per-step error dominates. SKINO's recursive form is best on advection/heat;
+per-step error dominates. CKINO's recursive form is best on advection/heat;
 T-FNO's is best on heat/burgers; only FNO (whose recursive form is weak
 everywhere) is beaten by seq2seq across the board.
 
@@ -402,8 +402,8 @@ metric while later predictions are fine.
 Two directions were tested: **removing** the symplectic structure (`nosymp`) and
 **enforcing it exactly** (`strict`, see §3.2). The strict variant is verified
 symplectic to 1e-7 by a Jacobian test (`||M^T Ω M - Ω||/||Ω||`), against 1e-2 for
-the nominal SKINO block - and the nominal block's defect *grows with dt*,
-confirming the original architecture is only pseudo-symplectic.
+the nominal CKINO block - and the nominal block's defect *grows with dt*,
+confirming the original architecture is only Chebyshev kernel-integral.
 
 Relative RMS at t=200, mean +/- std over 3 seeds:
 
@@ -434,7 +434,7 @@ equation the strict variant is in fact marginally *ahead* (0.1084 vs 0.1162),
 though the gap is small relative to seed-to-seed spread. What kills the case
 for it is the asymmetry of the downside. It never wins by a resolvable margin;
 it is 2-8x worse in the noise-free setting on the problems it can solve; it
-blows up entirely on KdV where the pseudo-symplectic model is fine; and in 3-D
+blows up entirely on KdV where the Chebyshev kernel-integral model is fine; and in 3-D
 it is one of only two configurations flagged *significantly worse* than the
 winner, collapsing from a usable horizon of 107 steps (pseudo) to **15** while
 still being scored "degraded" rather than divergent. Removing the structure
@@ -453,7 +453,7 @@ fields to be self-adjoint) while buying nothing, because the lift and projection
 are not symplectic anyway and none of these problems is integrated long enough
 for a modified-Hamiltonian argument to pay off.
 
-**Conclusion: the symplectic claim should be dropped from the paper.** SKINO's
+**Conclusion: the symplectic claim should be dropped from the paper.** CKINO's
 advantage comes from the separable Chebyshev kernel parameterisation.
 
 ### 4.7 Physics-informed loss
@@ -494,7 +494,7 @@ steps respectively).
 | `skino_noise` | 25,414 | 0.1162 +/- 0.0012 | 250 / 250 | good |
 | `fno_noise` | 29,402 | 3.272 +/- 4.08 | 172 +/- 73 | **blow-up** |
 
-Significantly worse than the winner: *none* — the three SKINO variants are not
+Significantly worse than the winner: *none* — the three CKINO variants are not
 statistically separable in 2-D; only FNO is clearly distinguishable, and only
 because it destabilises on some seeds.
 
@@ -517,7 +517,7 @@ Significantly worse than the winner: `strict_noise`, `fno_noise`.
    autoregressive variant degrades sharply. This is the strongest single
    result in the study and it strengthens rather than weakens as the problem
    gets harder.
-2. **Recursive SKINO becomes seed-sensitive in 3-D.** `skino_noise` has a
+2. **Recursive CKINO becomes seed-sensitive in 3-D.** `skino_noise` has a
    standard deviation *larger than its mean* (0.586 vs 0.533) and its verdict
    splits across seeds between `good` and `decorrelated`. On seed 0 alone it
    reaches 0.115, essentially tying the non-recursive model; averaged over
@@ -534,7 +534,7 @@ Significantly worse than the winner: `strict_noise`, `fno_noise`.
 
 The defining property of a *neural operator* - as opposed to a CNN with a fixed
 stencil - is that a model trained on a coarse grid should predict accurately on
-a finer grid of the same continuous fields, with no retraining. SKINO's central
+a finer grid of the same continuous fields, with no retraining. CKINO's central
 design claim is exactly this ("the model can be evaluated at any resolution").
 We test it directly: train the one-step operator at N=64 and measure the
 **one-step** relative error at N=64 (in-distribution) and at N=128 (zero-shot),
@@ -544,14 +544,14 @@ metric isolates the operator's resolution transfer from rollout stability.
 The harness is self-certifying: **FNO and T-FNO are pure spectral operators,
 resolution-invariant by construction, and they must score ratio 1.** They do -
 0.99-1.06 across all seeds and problems - so any degradation elsewhere is a
-property of the model, not the test. (skino/FNO/T-FNO are averaged over 3 seeds;
+property of the model, not the test. (ckino/FNO/T-FNO are averaged over 3 seeds;
 the hybrid/control rows are single-seed.)
 
 | operator | advection | heat | KdV | role |
 |---|---:|---:|---:|---|
 | FNO | **1.02** | **1.01** | **1.00** | validator (pure spectral) |
 | T-FNO | **1.00** | **0.99** | **0.99** | validator (pure spectral) |
-| **SKINO** | **57.6** (13-81) | 1.14 | **3.2** (1.7-4.3) | **subject** |
+| **CKINO** | **57.6** (13-81) | 1.14 | **3.2** (1.7-4.3) | **subject** |
 | U-FNO | 1.58 | 3.23 | 1.14 | hybrid (spectral + U-Net) |
 | U-Net | 1.19 | 0.49 | 4.13 | fixed-stencil control |
 | DeepONet / Transformer | *locked* | *locked* | *locked* | grid-sized parameters - cannot evaluate at N=128 at all |
@@ -559,50 +559,50 @@ the hybrid/control rows are single-seed.)
 *(numbers are err(N128)/err(N64), mean over 3 seeds with range; 1.0 = perfectly
 resolution-invariant.)*
 
-**SKINO does not deliver the zero-shot super-resolution it was designed for.**
+**CKINO does not deliver the zero-shot super-resolution it was designed for.**
 On advection its one-step error grows **13-81x** across seeds from N=64 (0.00027,
 the most accurate single number in the whole study) to N=128; on KdV it grows
 4.3x. Only on heat - where the solution is smooth and the coarse grid already
-resolves it - is SKINO invariant. Meanwhile FNO and T-FNO are *exactly*
+resolves it - is CKINO invariant. Meanwhile FNO and T-FNO are *exactly*
 invariant on the same data.
 
-**The honest interpretation, with its caveat.** SKINO's kernel is a Chebyshev
+**The honest interpretation, with its caveat.** CKINO's kernel is a Chebyshev
 polynomial that is invariant on its *native* Chebyshev-Gauss-Lobatto grid. But
 the PDE data here - like most spectral PDE data - lives on a **uniform periodic**
 grid, and evaluating the Chebyshev-parameterised kernel at a finer *uniform*
 resolution does not preserve the operator. So the correct statement is not
-"SKINO is not a neural operator" but:
+"CKINO is not a neural operator" but:
 
-> On the uniform grids that PDE data actually uses, SKINO's resolution-invariance
+> On the uniform grids that PDE data actually uses, CKINO's resolution-invariance
 > does not materialise (13-81x error growth on advection, up to 4.3x on KdV at 2x
 > resolution), whereas the pure Fourier operators deliver it exactly. The
 > theoretical selling point of the Chebyshev construction accrues, in practice,
-> to FNO and T-FNO - not to SKINO.
+> to FNO and T-FNO - not to CKINO.
 
-This holds across 3 seeds - the *direction* is fully robust (SKINO degrades on
+This holds across 3 seeds - the *direction* is fully robust (CKINO degrades on
 advection and KdV every seed, is invariant on heat every seed, FNO/T-FNO exact
 every seed) though the advection magnitude varies (13-81x). With the
 grid-convention caveat stated and the validator evidence (FNO/T-FNO at ~1.00)
 certifying the harness, the qualitative conclusion is solid. A CGL-gridded
-control - solving the PDEs on Chebyshev nodes to test whether SKINO *is*
+control - solving the PDEs on Chebyshev nodes to test whether CKINO *is*
 invariant there - is the natural follow-up.
 
 ---
 
 ## 5. Findings for the paper
 
-**F1 - At matched capacity SKINO wins 4 of 7 problems and T-FNO wins 3.** SKINO
+**F1 - At matched capacity CKINO wins 4 of 7 problems and T-FNO wins 3.** CKINO
 takes advection, KdV and 2-/3-D wave; a no-noise/non-recursive T-FNO takes heat,
 wave1d and Burgers. The honest claim is problem-class-dependent superiority -
-SKINO for transport, dispersion and multi-D waves; T-FNO for diffusion, simple
+CKINO for transport, dispersion and multi-D waves; T-FNO for diffusion, simple
 oscillation and shocks - not blanket superiority. On this accounting T-FNO is at
 least as strong overall.
 
-**F2 — SKINO is peak-optimal but not robust; T-FNO is the most consistent
-operator.** SKINO has the best single result on four problems and also the only
+**F2 — CKINO is peak-optimal but not robust; T-FNO is the most consistent
+operator.** CKINO has the best single result on four problems and also the only
 divergence. Any deployment recommendation must state this trade-off.
 
-**F3 — SKINO's parameter efficiency is real and survives best-vs-best.**
+**F3 — CKINO's parameter efficiency is real and survives best-vs-best.**
 Accuracy is flat from 6k to 400k parameters; 25k suffices. On Burgers this same
 saturation reveals a *capability* ceiling that capacity cannot fix.
 
@@ -617,7 +617,7 @@ freedom and returns nothing. The symplectic claim should be dropped.
 
 **F5 - Non-recursive prediction wins exactly where autoregressive rollout is
 unstable, by up to 3 orders of magnitude - and loses where it is stable.** On a
-noise-matched (no-noise) within-backbone comparison, SKINO's seq2seq beats its
+noise-matched (no-noise) within-backbone comparison, CKINO's seq2seq beats its
 recursive twin on wave1d (73x) and KdV (recursive diverges) but *loses* on the
 stably contractive advection and heat (recursive 1.4-2x better). The effect is
 the absence of an error-feedback loop (seq2seq rollout-growth ~1x vs 5-1700x,
@@ -636,15 +636,15 @@ automatically.
 **F7 — One-step PDE-residual losses are ill-conditioned for stiff dynamics**,
 with a measurable criterion (per-step phase rotation) for when to trust them.
 
-**F8 - SKINO does not deliver zero-shot super-resolution on uniform grids - its
+**F8 - CKINO does not deliver zero-shot super-resolution on uniform grids - its
 headline theoretical property.** Trained at N=64 and evaluated at N=128 on
-identical fields, SKINO's one-step error grows 13-81x on advection and up to
+identical fields, CKINO's one-step error grows 13-81x on advection and up to
 4.3x on KdV (3 seeds; direction robust every seed), while the pure spectral FNO
 and T-FNO are exactly resolution-invariant (ratio ~1.00) on the same data
-(§4.9). SKINO's Chebyshev kernel is invariant on its native CGL grid, but PDE
+(§4.9). CKINO's Chebyshev kernel is invariant on its native CGL grid, but PDE
 data lives on uniform grids, so in practice the resolution-invariance advantage
 accrues to the Fourier operators. This is the most consequential negative result
-for the SKINO thesis and should be stated plainly (a CGL-gridded control is the
+for the CKINO thesis and should be stated plainly (a CGL-gridded control is the
 natural follow-up).
 
 ---
@@ -675,7 +675,7 @@ natural follow-up).
 6. **seq2seq data asymmetry.** Recursive models see ~10⁴ windows from the same
    512 trajectories; seq2seq sees fewer, longer training examples. This is
    inherent to the method, but it is a confound worth stating.
-7. **2-D and 3-D cover only SKINO, strict-SKINO and FNO** - the other five
+7. **2-D and 3-D cover only CKINO, strict-CKINO and FNO** - the other five
    families are 1-D only here. Trajectory counts also shrink with dimension
    (512 -> 96 -> 48) and horizons shorten (500 -> 250 -> 150) to keep CPU cost
    tractable, so cross-dimensional RMS values are indicative of a trend, not
@@ -689,7 +689,7 @@ natural follow-up).
 
 ## 7. Suggested narrative
 
-The defensible thesis is **not** "SKINO beats everything". It is:
+The defensible thesis is **not** "CKINO beats everything". It is:
 
 > A separable Chebyshev kernel-integral operator attains state-of-the-art
 > accuracy on transport-, dispersion- and multi-dimensional-wave-dominated

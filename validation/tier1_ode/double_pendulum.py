@@ -97,11 +97,11 @@ def run() -> dict:
     m = SympNetODE(half_dim=2, hidden=48, depth=2, dt=DT, n_steps=1)
     t = train_one_step_model(m, train_states, train_targets, epochs=epochs)
     info = evaluate_one_step_model(
-        "SKINO-SympNet", m, test_states, test_targets, ic, true_traj, energy, n_long, 1, n_pairs=2
+        "CKINO-SympNet", m, test_states, test_targets, ic, true_traj, energy, n_long, 1, n_pairs=2
     )
     info["train_time_s"] = t["train_time_s"]
     info["num_params"] = sum(p.numel() for p in m.parameters())
-    results["SKINO-SympNet"] = info
+    results["CKINO-SympNet"] = info
 
     set_global_seed(2)
     m = NonSympODE(state_dim=4, hidden=48, depth=3)

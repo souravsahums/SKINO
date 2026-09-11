@@ -2,8 +2,8 @@
 
 ODE baselines (Tier 1):
     MLPResidualODE     — a generic residual MLP step (no structure).
-    SympNetODE         — leap-frog with learnable U_q, U_p (≈ SKINO on a single
-                         spatial point). This is the SKINO-derived structured
+    SympNetODE         — leap-frog with learnable U_q, U_p (≈ CKINO on a single
+                         spatial point). This is the CKINO-derived structured
                          baseline for ODEs.
     NonSympODE         — same width/depth as SympNetODE but with a generic
                          coupling (q,p) -> (q',p') = MLP(q,p). Used in
@@ -15,7 +15,7 @@ PDE baselines (Tier 2 / 3):
     DeepONet1D           — branch / trunk operator network (Lu et al., 2021).
     TinyTransformer1D    — small encoder–only transformer treating grid points
                            as tokens (a Transformer-PDE baseline).
-    SKINO1DNoSymplectic  — SKINO architecture with the Stoermer–Verlet block
+    CKINO1DNoSymplectic  — CKINO architecture with the Stoermer–Verlet block
                            replaced by an ordinary residual block. This is
                            the L6 ablation that isolates the contribution of
                            the symplectic constraint.
@@ -100,7 +100,7 @@ class SympNetODE(nn.Module):
         q ← q +  dt    · U_p(p)
         p ← p − (dt/2) · U_q(q)
 
-    This is the SKINO symplectic block specialised to the ODE setting
+    This is the CKINO symplectic block specialised to the ODE setting
     (the kernel integral collapses to a pointwise MLP because there is no
     spatial axis). It is provably symplectic to O(dt^2) for any choice of
     the learnable vector fields U_q, U_p — see proofs.md, Theorem 2.
@@ -237,21 +237,21 @@ class TinyTransformer1D(nn.Module):
 
 
 # ===========================================================================
-# Ablation: SKINO without the symplectic constraint
+# Ablation: CKINO without the symplectic constraint
 # ===========================================================================
 class _ResidualKernelBlock(nn.Module):
     """A plain residual block over the same kernel-integral operator that
-    SKINO uses, but *without* the symplectic q/p split.
+    CKINO uses, but *without* the symplectic q/p split.
 
     v_{k+1} = v_k + dt * K(v_k)
 
-    where K is the SKINO kernel integral.  This isolates the contribution
+    where K is the CKINO kernel integral.  This isolates the contribution
     of the symplectic structure: K is identical, only the integrator differs.
     """
 
     def __init__(self, n_train: int, channels: int, rank: int, dt: float = 0.1):
         super().__init__()
-        from skino.nd import SeparableKernelIntegralND
+        from ckino.nd import SeparableKernelIntegralND
 
         self.K = SeparableKernelIntegralND(1, n_train, channels, rank)
         self.dt = dt
@@ -260,8 +260,8 @@ class _ResidualKernelBlock(nn.Module):
         return v + self.dt * self.K(v)
 
 
-class SKINO1DNoSymplectic(nn.Module):
-    """Drop-in replacement for ``SKINO`` with non-symplectic residual blocks.
+class CKINO1DNoSymplectic(nn.Module):
+    """Drop-in replacement for ``CKINO`` with non-symplectic residual blocks.
 
     Same lifting, hypernet and projection layers — only the dynamics layer
     changes.  Used for the L6 ablation in the comparative study.
@@ -280,8 +280,8 @@ class SKINO1DNoSymplectic(nn.Module):
         dt: float = 0.1,
     ):
         super().__init__()
-        from skino.nd import LieLiftingND
-        from skino.hypernet import HyperNet
+        from ckino.nd import LieLiftingND
+        from ckino.hypernet import HyperNet
 
         self.lift = LieLiftingND(1, in_channels, hidden_channels, n_generators=n_generators)
         self.hyper = HyperNet(pde_param_dim, out_dim=1) if pde_param_dim > 0 else None

@@ -1,4 +1,21 @@
-# SKINO Validation — Satisfaction Checklist
+# CKINO Validation — Satisfaction Checklist
+
+> # ⚠️ CORRECTION NOTICE (2026)
+>
+> Rows in this checklist that mark symplectic guarantees as satisfied ("Approximate
+> symplectic preservation ✅", "Stability bounds ✅", the "provable approximate
+> symplectic preservation" novelty claim, and the quoted symplectic-defect figures
+> of 10⁻⁸ / 8.3×10⁻⁴) are **withdrawn**. Those defects were computed with an
+> unweighted form valid only on a uniform grid. Measured correctly — relative
+> defect $\lVert WA-A^{\top}W\rVert/\lVert WA\rVert$ from the autograd Jacobian —
+> the CKINO block scores **≈ 1.37**, i.e. it is volume-preserving but **not
+> symplectic**. Theorems 2 and 5 are retracted in
+> [`../../proofs.md`](../../proofs.md).
+>
+> An exactly symplectic construction does exist (SA-Cheb, 2×10⁻¹⁶, Theorem 2'), and
+> a controlled ablation shows it is *less* accurate than its non-symplectic twin on
+> all six 1-D problems. Current results:
+> [`../../track2/REPORT_FINAL_GPU.md`](../../track2/REPORT_FINAL_GPU.md).
 
 > **Purpose.**  This document maps every requirement in the user's
 > validation-plan specification (sections 1 – 17) to the concrete file,
@@ -13,12 +30,12 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 > **⚠️ Retraction / update (2026).** This checklist reflects the early
 > small-scale Tier suite. Two of its claims were **overturned** by the later
 > parameter-matched, multi-seed study (`validation/report/research_paper.md`,
-> `track2/REPORT_FINAL_GPU.md`): (1) **resolution generalisation** — SKINO does
+> `track2/REPORT_FINAL_GPU.md`): (1) **resolution generalisation** — CKINO does
 > **not** achieve zero-shot super-resolution on uniform PDE grids (13–81× error
-> at 2×; FNO/T-FNO are the invariant ones), so any "L4 ✅ SKINO" below is
+> at 2×; FNO/T-FNO are the invariant ones), so any "L4 ✅ CKINO" below is
 > retracted; and (2) **symplecticity as an advantage** — it gives no accuracy
 > gain and *diverges* on KdV, so it is a conservation property, not a superiority
-> claim. At matched capacity the headline is **SKINO 4/7 vs T-FNO 3/7**, a tie.
+> claim. At matched capacity the headline is **CKINO 4/7 vs T-FNO 3/7**, a tie.
 
 ---
 
@@ -31,7 +48,7 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | L3    | Conservation properties                      | ✅      | `energy_drift_curve`, `mass_drift_curve`, `momentum_drift_curve`, plus **symplectic defect** ‖TᵀJT−J‖_F implemented in `common/metrics.py:symplectic_defect_2d`/`_2n` |
 | L4    | OOD operator generalisation                  | ✅      | `efficiency.json: resolution_errors` (N = 32 → 64 → 128); plot `efficiency_resolution.png` |
 | L5    | Computational efficiency                     | ✅      | `efficiency.json: train_time_s, inference_time_s, num_params, memory_bytes`; plots `efficiency_*.png` |
-| L6    | Ablation: does symplecticity matter?         | ✅      | `SKINO1DNoSymplectic` in `common/baselines.py` — same architecture, only the integrator changes; results in every Tier-2 and Tier-3 JSON |
+| L6    | Ablation: does symplecticity matter?         | ✅      | `CKINO1DNoSymplectic` in `common/baselines.py` — same architecture, only the integrator changes; results in every Tier-2 and Tier-3 JSON |
 
 ---
 
@@ -43,7 +60,7 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | ------------------------ | ------ | -------- |
 | Harmonic oscillator      | ✅      | `tier1_ode/harmonic_oscillator.py`, `results/tier1_harmonic.json`, figures `tier1_harmonic_*.png` |
 | Pendulum                 | ✅      | `tier1_ode/pendulum.py`, `results/tier1_pendulum.json`, figures `tier1_pendulum_*.png` |
-| Double pendulum          | ✅      | `tier1_ode/double_pendulum.py`, `results/tier1_double_pendulum.json`, figures `tier1_double_pendulum_*.png`. Chaotic 4-D Hamiltonian; SKINO has 96× lower symplectic defect than NonSymp-MLP and 2.4× lower long-horizon error |
+| Double pendulum          | ✅      | `tier1_ode/double_pendulum.py`, `results/tier1_double_pendulum.json`, figures `tier1_double_pendulum_*.png`. Chaotic 4-D Hamiltonian; CKINO has 96× lower symplectic defect than NonSymp-MLP and 2.4× lower long-horizon error |
 | Kepler orbit             | ✅      | `tier1_ode/kepler.py`, `results/tier1_kepler.json`, figures `tier1_kepler_*.png` |
 | Energy conservation check | ✅     | `energy_drift_curve` in each JSON; plots `tier1_*_energy_drift.png` |
 | Phase-space preservation | ✅      | `tier1_*_phase_space.png` (harmonic, pendulum) |
@@ -54,7 +71,7 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | Requirement              | Status | Evidence |
 | ------------------------ | ------ | -------- |
 | Wave equation            | ✅      | `tier2_pde/wave_1d.py`, `results/tier2_wave.json`, figures `tier2_wave_*.png` |
-| KdV equation             | ⚠️      | `tier2_pde/kdv.py`, `results/tier2_kdv.json`.  KdV is a *non-canonical* Hamiltonian PDE; SKINO's hard (q, p) split is not the right symplectic structure here and the paper reports this as a scope limitation (§7) rather than tries to hide it |
+| KdV equation             | ⚠️      | `tier2_pde/kdv.py`, `results/tier2_kdv.json`.  KdV is a *non-canonical* Hamiltonian PDE; CKINO's hard (q, p) split is not the right symplectic structure here and the paper reports this as a scope limitation (§7) rather than tries to hide it |
 | Nonlinear Schrödinger    | ⚠️      | Not implemented; the wave equation already exercises the canonical PDE Hamiltonian and the conservation tests required.  NLS would slot into the same orchestrator with a 50-line `tier2_pde/nls.py` |
 | Shallow water / Euler    | ⚠️      | Substituted by the **reservoir conservation law** in Tier 3, which exercises the same "scalar conservation law" structure used in shallow-water flow and is more representative of the user's stated downstream application |
 | Operator learning        | ✅      | Every Tier-2 model maps `u(·, t) ↦ u(·, t+dt)` as a function-space operator |
@@ -77,9 +94,9 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | Requirement                  | Status | Evidence |
 | ---------------------------- | ------ | -------- |
 | Train short, test long       | ✅      | One-step training, 200–800-step rollout testing in every experiment |
-| Compare FNO / DeepONet / Transformer / SKINO | ✅ | All four are in `common/baselines.py`; rollout curves in every Tier-2 and Tier-3 PNG |
+| Compare FNO / DeepONet / Transformer / CKINO | ✅ | All four are in `common/baselines.py`; rollout curves in every Tier-2 and Tier-3 PNG |
 | Show FNO drifts / diverges  | ✅      | Tier 2 wave: FNO NaN-crashes at step 91 (`figures/tier2_wave_state_error.png`). Tier 3 porous: FNO mass drift = **2.66 × 10²⁵** (`figures/tier3_porous_flow_mass_drift.png`) |
-| Show SKINO remains bounded  | ✅      | Tier 3 mass drift = 9.4 × 10⁻³, state error = 7.9 × 10⁻³ over 400 steps |
+| Show CKINO remains bounded  | ✅      | Tier 3 mass drift = 9.4 × 10⁻³, state error = 7.9 × 10⁻³ over 400 steps |
 
 ---
 
@@ -88,8 +105,8 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | Requirement                  | Status | Evidence |
 | ---------------------------- | ------ | -------- |
 | Definition + implementation  | ✅      | `common/metrics.py:symplectic_defect_2d` (general dim `_2n` for Kepler) |
-| Measure on SKINO + baselines | ✅      | Reported in every Tier-1 JSON and `summary.csv` |
-| Quantitative result          | ✅      | SKINO **3.16 × 10⁻⁸** on harmonic, **1.05 × 10⁻⁸** on pendulum — at single-precision round-off; NonSymp-MLP 0.14; ResidualMLP 7 × 10⁻⁴ |
+| Measure on CKINO + baselines | ✅      | Reported in every Tier-1 JSON and `summary.csv` |
+| Quantitative result          | ✅      | CKINO **3.16 × 10⁻⁸** on harmonic, **1.05 × 10⁻⁸** on pendulum — at single-precision round-off; NonSymp-MLP 0.14; ResidualMLP 7 × 10⁻⁴ |
 | Central paper table          | ✅      | `comparative_study.md` §3.2; `research_paper.md` §6.1 |
 
 ---
@@ -99,7 +116,7 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | Requirement                  | Status | Evidence |
 | ---------------------------- | ------ | -------- |
 | Track `|H_t − H_0|`         | ✅      | `energy_drift_curve` in every Tier-1 JSON and Tier-2 wave JSON |
-| Plot FNO / Transformer / SKINO drift | ✅ | `tier1_*_energy_drift.png`, `tier2_wave_energy_drift.png` |
+| Plot FNO / Transformer / CKINO drift | ✅ | `tier1_*_energy_drift.png`, `tier2_wave_energy_drift.png` |
 | Publication-grade figure     | ✅      | Both the Tier-1 energy plots (multi-decade log scale) and the Tier-3 mass-drift plot (FNO climbing from 10⁻² to 10²⁶) are ready to drop into a paper |
 
 ---
@@ -109,8 +126,8 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | Requirement              | Status | Evidence |
 | ------------------------ | ------ | -------- |
 | Plot (q, p) trajectories | ✅      | `tier1_harmonic_phase_space.png`, `tier1_pendulum_phase_space.png` |
-| Compare true / FNO / SKINO | ✅    | All three lines overlaid on each phase-space figure |
-| Orbit closure preserved  | ✅      | SKINO orbit visually identical to analytic flow; non-symplectic baselines distort or thicken |
+| Compare true / FNO / CKINO | ✅    | All three lines overlaid on each phase-space figure |
+| Orbit closure preserved  | ✅      | CKINO orbit visually identical to analytic flow; non-symplectic baselines distort or thicken |
 
 ---
 
@@ -130,9 +147,9 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | Variant                          | Symplectic? | Implementation | Status |
 | -------------------------------- | ----------- | -------------- | ------ |
 | FNO baseline                     | ❌           | `common/baselines.py:FNO1D` | ✅ |
-| SKINO-NoSymp ("our op w/o constraint") | ❌     | `common/baselines.py:SKINO1DNoSymplectic` (same lifting / kernel / hypernet, generic residual block) | ✅ |
+| CKINO-NoSymp ("our op w/o constraint") | ❌     | `common/baselines.py:CKINO1DNoSymplectic` (same lifting / kernel / hypernet, generic residual block) | ✅ |
 | Partial symplectic kernel        | ⚠️          | Not implemented explicitly; the "FiLM modulation zero-init" path inside the symplectic block already provides a 1-parameter interpolation between exact and modulated symplectic update, so the *partial* case is achievable but not separately reported | ⚠️ |
-| Full SKINO                       | ✅           | `skino/model.py:SKINO`, `skino/nd.py:SKINO_ND` | ✅ |
+| Full CKINO                       | ✅           | `ckino/model.py:CKINO`, `ckino/nd.py:CKINO_ND` | ✅ |
 | Compare rollout / energy / error | ✅           | Every Tier-2 and Tier-3 result table |
 
 ---
@@ -189,7 +206,7 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | DeepONet                  | ✅ `common/baselines.py:DeepONet1D` |
 | Graph Neural Operator     | ⚠️ Not implemented; the FNO already represents the **diagonal-spectral** family.  GNO would slot into `common/baselines.py` with ≈ 80 lines of code |
 | Transformer-based PDE     | ✅ `common/baselines.py:TinyTransformer1D` (Vaswani et al. 2017; Cao 2021) |
-| SympNet / HNN             | ✅ `common/baselines.py:SympNetODE` (SKINO-derived); HNN is structurally identical to NonSymp-MLP + a learned scalar `H`, which the SKINO-SympNet generalises |
+| SympNet / HNN             | ✅ `common/baselines.py:SympNetODE` (CKINO-derived); HNN is structurally identical to NonSymp-MLP + a learned scalar `H`, which the CKINO-SympNet generalises |
 
 ---
 
@@ -211,7 +228,7 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 | Stress dimension     | Status | Evidence |
 | -------------------- | ------ | -------- |
 | Long horizons        | ✅      | 200 (wave) / 400 (KdV, reservoir) / 500–800 (ODE) steps |
-| Chaotic systems      | ✅      | Double pendulum near separatrix — SKINO defect 8.3 × 10⁻⁴, NonSymp-MLP 8.0 × 10⁻² (96× gap).  Pendulum is also mildly chaotic |
+| Chaotic systems      | ✅      | Double pendulum near separatrix — CKINO defect 8.3 × 10⁻⁴, NonSymp-MLP 8.0 × 10⁻² (96× gap).  Pendulum is also mildly chaotic |
 | Unseen resolutions   | ✅      | Train N=32, test N=64, 128 |
 | Noisy initial conditions | ⚠️  | ICs are sampled fresh from the same generator distribution; not separately stressed with additive noise.  Adding a 1 % Gaussian-noise IC test is a one-flag extension |
 
@@ -223,7 +240,7 @@ Legend: ✅ = fully satisfied, ⚠️ = satisfied with documented caveat,
 
 | Component                          | Status |
 | ---------------------------------- | ------ |
-| Operator learning                  | ✅ SKINO is a neural operator |
+| Operator learning                  | ✅ CKINO is a neural operator |
 | Scientific ML                      | ✅ Tier 1 / 2 / 3 |
 | Symplectic / geometric preservation | ✅ Theorem 1 + empirical |
 | Industrial reservoir systems       | ✅ Buckley–Leverett scalar conservation law, Tier 3 |
@@ -249,19 +266,19 @@ The combination is novel and is the central pitch of the paper.
 
 | Claim                                                                                                                | Number                                  |
 | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Symplectic defect ‖TᵀJT − J‖_F (SKINO, pendulum)                                                                     | **1.05 × 10⁻⁸**                          |
+| Symplectic defect ‖TᵀJT − J‖_F (CKINO, pendulum)                                                                     | **1.05 × 10⁻⁸**                          |
 | Same defect for NonSymp-MLP baseline                                                                                 | 1.04 × 10⁻¹  (**7 orders larger**)       |
-| Double pendulum (chaotic): SKINO symplectic defect                                                                   | **8.32 × 10⁻⁴**                          |
+| Double pendulum (chaotic): CKINO symplectic defect                                                                   | **8.32 × 10⁻⁴**                          |
 | Same metric for NonSymp-MLP baseline                                                                                 | 8.02 × 10⁻²  (**96× larger**)            |
-| Double pendulum 600-step long-horizon rel-L² (SKINO)                                                                 | 0.410                                    |
+| Double pendulum 600-step long-horizon rel-L² (CKINO)                                                                 | 0.410                                    |
 | Same metric for NonSymp-MLP (essentially totally diverged)                                                           | 0.998                                    |
-| Tier 2 wave: SKINO 200-step rollout RMSE                                                                             | 2.11 × 10⁵                               |
-| Same metric for SKINO-NoSymp ablation (identical arch)                                                               | 5.59 × 10¹⁶ (**11 orders larger**)       |
+| Tier 2 wave: CKINO 200-step rollout RMSE                                                                             | 2.11 × 10⁵                               |
+| Same metric for CKINO-NoSymp ablation (identical arch)                                                               | 5.59 × 10¹⁶ (**11 orders larger**)       |
 | Same metric for FNO baseline                                                                                         | NaN — crashed at step 91                 |
-| Tier 3 reservoir flow: SKINO 400-step mass drift                                                                     | **9.37 × 10⁻³**                          |
+| Tier 3 reservoir flow: CKINO 400-step mass drift                                                                     | **9.37 × 10⁻³**                          |
 | Same metric for FNO baseline                                                                                         | 2.66 × 10²⁵ (**27 orders larger**)       |
-| Resolution generalisation: zero-shot N = 32 → 128                                                                    | ✅ SKINO; ❌ DeepONet, Transformer       |
-| Parameters at the wave-equation task                                                                                 | SKINO 6 406  vs  FNO 78 114 (**12×**)    |
+| Resolution generalisation: zero-shot N = 32 → 128                                                                    | ✅ CKINO; ❌ DeepONet, Transformer       |
+| Parameters at the wave-equation task                                                                                 | CKINO 6 406  vs  FNO 78 114 (**12×**)    |
 | Total wall-clock to reproduce the entire suite (CPU, 7 threads)                                                      | ≈ 30 minutes                             |
 
 ---

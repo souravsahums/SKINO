@@ -31,8 +31,8 @@ Companion to [`REPORT_V2.md`](REPORT_V2.md) (numbers, methodology, findings).
 
 | Name | Operator | Recipe |
 |---|---|---|
-| `skino_plain` | SKINO (pseudo-symplectic kernel-integral) | one-step + K-curriculum, **no noise** |
-| `skino_noise` | SKINO | + **2 % input-noise injection** |
+| `skino_plain` | CKINO (Chebyshev kernel-integral kernel-integral) | one-step + K-curriculum, **no noise** |
+| `skino_noise` | CKINO | + **2 % input-noise injection** |
 | `skino_nosymp_plain` / `_noise` | **Ablation** — same kernel/lift/projection, symplectic block replaced by a plain residual block | as above |
 | `fno_plain` / `_noise` | Fourier Neural Operator (Li et al. 2021) | as above |
 | `transformer_plain` / `_noise` | Encoder-only PDE-transformer | as above |
@@ -254,7 +254,7 @@ on a shared scale, with the per-panel relative RMS printed underneath.
 * `skino_noise` — very close, with faint residual structure (0.105).
 * `fno_plain` — the lobes are visibly smeared and merged; the error panel shows
   clear organised structure (0.249) — at **2.1 M parameters**, 83× more than
-  SKINO.
+  CKINO.
 * **`skino_direct`** — the prediction panel is **blank white**: it output
   approximately zero. The error panel is a perfect copy of the truth pattern,
   which is the unmistakable signature of a model that predicts nothing
@@ -269,18 +269,18 @@ on a shared scale, with the per-panel relative RMS printed underneath.
 Accuracy (y, log) against model size (x, log). **Bottom-left is better:** fewer
 parameters *and* lower error. Circles = recursive, squares = non-recursive.
 
-* On **wave1d** and **kdv**, the SKINO family occupies the bottom-left; FNO sits
+* On **wave1d** and **kdv**, the CKINO family occupies the bottom-left; FNO sits
   far to the right (136 k parameters) without an accuracy payoff.
-* On **wave2d** the gap is extreme — SKINO at 2.5 × 10⁴ parameters and RMS
+* On **wave2d** the gap is extreme — CKINO at 2.5 × 10⁴ parameters and RMS
   0.016, FNO2D at 2.1 × 10⁶ parameters and RMS 0.183.
 
-| wave2d | SKINO | FNO2D |
+| wave2d | CKINO | FNO2D |
 |---|---:|---:|
 | parameters | 25,414 | 2,102,594 (**83×**) |
 | RMS @ t=100 | 0.016 | 0.183 (**11× worse**) |
 
 The advantage **grows with dimension** (≈6× in 1-D → 83× in 2-D) because FNO's
-spectral weights scale as (modes)^d while SKINO's separable Chebyshev kernel
+spectral weights scale as (modes)^d while CKINO's separable Chebyshev kernel
 scales linearly in the number of axes. Since the target problem is 3-D, this
 trend is the most practically relevant result of the programme.
 
@@ -315,7 +315,7 @@ target, dotted = 100 % (useless).
 
 Shows **error-growth rate**, which the summary heatmap hides:
 * On kdv, `skino_noise` rises gently (0.041 → 0.165 over 500 steps) whereas
-  `fno_plain` rises steeply (0.059 → 0.462) — they start comparable but SKINO
+  `fno_plain` rises steeply (0.059 → 0.462) — they start comparable but CKINO
   degrades ~3× more slowly.
 * The `*_direct` bars are **flat across checkpoints** — the signature of a
   horizon-independent constant predictor rather than a model that tracks
@@ -400,7 +400,7 @@ curves are actually degenerate — two forms of "predict almost nothing"
 (amplitude collapse and constant-field prediction) — while the models that
 *look* worse in the table are the ones genuinely tracking the physics. The KdV
 space-time map (§5.1) shows the divergence step directly, and the 2-D triptych
-(§5.5) shows the one unambiguous success: SKINO reproducing the 2-D wavefield
+(§5.5) shows the one unambiguous success: CKINO reproducing the 2-D wavefield
 with an essentially black error panel at 83× fewer parameters than FNO, next to
 a non-recursive model whose error panel is an exact copy of the signal it failed
 to predict. **Any future rollout metric in this project should be published next

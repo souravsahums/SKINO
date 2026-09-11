@@ -128,7 +128,7 @@ class PairDataset(Dataset):
 class WindowDataset(Dataset):
     """K-step rollout windows: (x_0, x_1, ..., x_K) from any number of trajectories.
 
-    Used by the SKINO push-forward / unroll training loop. Each item is a
+    Used by the CKINO push-forward / unroll training loop. Each item is a
     tensor of shape (K+1, 6, nx, ny, nz) in normalised PyTorch layout.
 
     The dataset works directly off the per-step ``q_t`` / ``p_t`` arrays in

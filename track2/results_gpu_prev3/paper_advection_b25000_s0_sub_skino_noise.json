@@ -1,0 +1,106 @@
+{
+  "_meta": {
+    "problem": "advection",
+    "n_traj": 512,
+    "horizon": 600,
+    "t_out": 500,
+    "grid_n": 64,
+    "dt": 0.005,
+    "budget": 25000,
+    "epochs": 15,
+    "seed": 0,
+    "checkpoints": [
+      10,
+      25,
+      50,
+      100,
+      150,
+      200
+    ],
+    "hardware": {
+      "device": "cuda",
+      "torch": "2.8.0+cu126",
+      "host": "eb5651cfe47d4c429af21bcd5e5be838000001",
+      "platform": "Linux-6.8.0-1064-azure-x86_64-with-glibc2.35",
+      "gpu": "Tesla T4",
+      "gpu_capability": "7.5"
+    }
+  },
+  "skino_noise": {
+    "family": "skino",
+    "mode": "recursive",
+    "noise": 0.02,
+    "lambda_pde": 0.0,
+    "params": 25067,
+    "width": [
+      32,
+      8
+    ],
+    "train_time_s": 243.02094554901123,
+    "final_train_loss": 0.0004058743124915054,
+    "usable_horizon": 500,
+    "last_good_step": 500,
+    "metrics": {
+      "10": {
+        "rel_rms": 0.0036363834515213966,
+        "amp_ratio": 0.9974504709243774,
+        "pattern_corr": 0.9999966621398926,
+        "spec_low": 0.0029034174513071775,
+        "spec_high": 2796.723388671875,
+        "energy_err": 0.005091821774840355,
+        "mass_err": 44750460.0,
+        "verdict": "good"
+      },
+      "25": {
+        "rel_rms": 0.00871209055185318,
+        "amp_ratio": 0.9937531352043152,
+        "pattern_corr": 0.9999815225601196,
+        "spec_low": 0.006884231232106686,
+        "spec_high": 2937.55126953125,
+        "energy_err": 0.01245141215622425,
+        "mass_err": 6671.58544921875,
+        "verdict": "good"
+      },
+      "50": {
+        "rel_rms": 0.016272995620965958,
+        "amp_ratio": 0.9882725477218628,
+        "pattern_corr": 0.9999369382858276,
+        "spec_low": 0.012927538715302944,
+        "spec_high": 2860.640380859375,
+        "energy_err": 0.023307105526328087,
+        "mass_err": 10531.61328125,
+        "verdict": "good"
+      },
+      "100": {
+        "rel_rms": 0.029872816056013107,
+        "amp_ratio": 0.9779273867607117,
+        "pattern_corr": 0.999794602394104,
+        "spec_low": 0.023029878735542297,
+        "spec_high": 1836.8505859375,
+        "energy_err": 0.043637774884700775,
+        "mass_err": 5140.26806640625,
+        "verdict": "good"
+      },
+      "150": {
+        "rel_rms": 0.040719516575336456,
+        "amp_ratio": 0.9685911536216736,
+        "pattern_corr": 0.9996528029441833,
+        "spec_low": 0.032470911741256714,
+        "spec_high": 1436.4251708984375,
+        "energy_err": 0.06181054934859276,
+        "mass_err": 85948720.0,
+        "verdict": "good"
+      },
+      "200": {
+        "rel_rms": 0.052035100758075714,
+        "amp_ratio": 0.9600154757499695,
+        "pattern_corr": 0.9994231462478638,
+        "spec_low": 0.04116924852132797,
+        "spec_high": 1132.213134765625,
+        "energy_err": 0.07833991199731827,
+        "mass_err": 5671.2197265625,
+        "verdict": "good"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-"""Roll out FNO and SKINO, score wMAPE per step, render comparison video.
+"""Roll out FNO and CKINO, score wMAPE per step, render comparison video.
 
 The script:
 1. Loads the test trajectory (same `small_run_<test-run>.npz` that wasn't seen
@@ -42,7 +42,7 @@ from data_utils import (  # noqa: E402
 )
 from fno_model import FNO3D  # noqa: E402
 
-from skino.nd import SKINO3D  # noqa: E402
+from ckino.nd import CKINO3D  # noqa: E402
 
 
 def parse_args(argv=None):
@@ -105,7 +105,7 @@ def build_models(args, stats: TrajectoryStats, device):
     fno.load_state_dict(torch.load(os.path.join(args.models_dir, "fno.pt"), map_location=device))
     fno.eval()
 
-    skino = SKINO3D(
+    skino = CKINO3D(
         n_train=args.skino_ntrain,
         in_channels=6,
         out_channels=6,
@@ -180,7 +180,7 @@ def make_video(
     """
     T = truth.shape[0]
     # Anchor the colormap on the GROUND TRUTH so the truth panel is always
-    # well-saturated. If a model over-shoots (e.g. SKINO at later times) the
+    # well-saturated. If a model over-shoots (e.g. CKINO at later times) the
     # rendering will simply clip at +/- vmax instead of squashing the truth
     # toward zero.
     truth_vmax = float(np.max(np.abs(truth)))
@@ -190,7 +190,7 @@ def make_video(
     fig, axes = plt.subplots(1, 3, figsize=(13.5, 5.0), constrained_layout=False)
     fig.subplots_adjust(left=0.04, right=0.96, top=0.88, bottom=0.18, wspace=0.18)
 
-    titles = ["Ground truth (elm1.py)", "FNO prediction", "SKINO prediction"]
+    titles = ["Ground truth (elm1.py)", "FNO prediction", "CKINO prediction"]
     data_arrays = [truth, fno_pred, skino_pred]
     wmape_arrays = [None, wmape_fno, wmape_skino]
     ims = []
@@ -264,7 +264,7 @@ def main(argv=None):
 
     stats = load_stats(os.path.join(args.models_dir, "stats.json"))
     fno, skino = build_models(args, stats, device)
-    print("Loaded FNO and SKINO checkpoints.")
+    print("Loaded FNO and CKINO checkpoints.")
 
     # Load ground-truth trajectory.
     test_path = os.path.join(args.data_dir, f"small_run_{args.test_run}.npz")
@@ -309,7 +309,7 @@ def main(argv=None):
     t0 = time.time()
     skino_traj = rollout(skino, x0, steps)
     t_skino = time.time() - t0
-    print(f"FNO rollout: {t_fno:.2f}s  SKINO rollout: {t_skino:.2f}s")
+    print(f"FNO rollout: {t_fno:.2f}s  CKINO rollout: {t_skino:.2f}s")
 
     # De-normalise into (q, p).
     fno_q = np.moveaxis(fno_traj[:, :3] * stats.q_scale, 1, -1)
@@ -369,20 +369,20 @@ def main(argv=None):
         json.dump(metrics, f, indent=2)
     print(
         f"Mean wMAPE(q) -- FNO: {metrics['summary_q']['fno_mean']*100:.2f} %, "
-        f"SKINO: {metrics['summary_q']['skino_mean']*100:.2f} %"
+        f"CKINO: {metrics['summary_q']['skino_mean']*100:.2f} %"
     )
     print(
         f"Final wMAPE(q) -- FNO: {metrics['summary_q']['fno_final']*100:.2f} %, "
-        f"SKINO: {metrics['summary_q']['skino_final']*100:.2f} %"
+        f"CKINO: {metrics['summary_q']['skino_final']*100:.2f} %"
     )
 
     # ---- wMAPE plot ----
     fig, ax = plt.subplots(1, 1, figsize=(7.5, 4.0))
     t_axis_ms = np.arange(steps + 1) * stats.save_every * stats.dt * 1000.0
     ax.plot(t_axis_ms, 100.0 * wmape_fno_q, label="FNO – q", color="#1f77b4", lw=2)
-    ax.plot(t_axis_ms, 100.0 * wmape_skino_q, label="SKINO – q", color="#d62728", lw=2)
+    ax.plot(t_axis_ms, 100.0 * wmape_skino_q, label="CKINO – q", color="#d62728", lw=2)
     ax.plot(t_axis_ms, 100.0 * wmape_fno_p, label="FNO – p", color="#1f77b4", lw=1, ls="--")
-    ax.plot(t_axis_ms, 100.0 * wmape_skino_p, label="SKINO – p", color="#d62728", lw=1, ls="--")
+    ax.plot(t_axis_ms, 100.0 * wmape_skino_p, label="CKINO – p", color="#d62728", lw=1, ls="--")
     ax.set_xlabel("time  [ms]")
     ax.set_ylabel("wMAPE  [%]")
     ax.set_title(f"Autoregressive rollout error on test trajectory (run {args.test_run})")

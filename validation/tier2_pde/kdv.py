@@ -17,12 +17,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from skino.nd import SKINO_ND
+from ckino.nd import CKINO_ND
 from ..common import (
     FNO1D,
     DeepONet1D,
     TinyTransformer1D,
-    SKINO1DNoSymplectic,
+    CKINO1DNoSymplectic,
     relative_l2,
     set_global_seed,
 )
@@ -98,19 +98,19 @@ def momentum(u: torch.Tensor) -> torch.Tensor:
 # ---------------------------------------------------------------------------
 # Model adapters (single-channel)
 # ---------------------------------------------------------------------------
-class _SKINO(nn.Module):
+class _CKINO(nn.Module):
     def __init__(self, n_train: int):
         super().__init__()
-        self.net = SKINO_ND(spatial_dims=1, n_train=n_train, in_channels=1, out_channels=1, hidden_channels=16, rank=8, depth=4, dt=DT / 4)
+        self.net = CKINO_ND(spatial_dims=1, n_train=n_train, in_channels=1, out_channels=1, hidden_channels=16, rank=8, depth=4, dt=DT / 4)
 
     def forward(self, x):
         return self.net(x)
 
 
-class _SKINONoSymp(nn.Module):
+class _CKINONoSymp(nn.Module):
     def __init__(self, n_train: int):
         super().__init__()
-        self.net = SKINO1DNoSymplectic(n_train=n_train, in_channels=1, out_channels=1, hidden_channels=16, rank=8, depth=4, dt=DT / 4)
+        self.net = CKINO1DNoSymplectic(n_train=n_train, in_channels=1, out_channels=1, hidden_channels=16, rank=8, depth=4, dt=DT / 4)
 
     def forward(self, x):
         return self.net(x)
@@ -189,14 +189,14 @@ def run() -> dict:
     results = {}
 
     set_global_seed(1)
-    m = _SKINO(n_train=n - 1)
+    m = _CKINO(n_train=n - 1)
     tt = train_pde_one_step(m, train_inputs, train_targets, epochs=epochs)
-    results["SKINO"] = _evaluate("SKINO", m, test_inputs, test_targets, ic, true_traj, n_long, sum(p.numel() for p in m.parameters()), tt["train_time_s"])
+    results["CKINO"] = _evaluate("CKINO", m, test_inputs, test_targets, ic, true_traj, n_long, sum(p.numel() for p in m.parameters()), tt["train_time_s"])
 
     set_global_seed(2)
-    m = _SKINONoSymp(n_train=n - 1)
+    m = _CKINONoSymp(n_train=n - 1)
     tt = train_pde_one_step(m, train_inputs, train_targets, epochs=epochs)
-    results["SKINO-NoSymp"] = _evaluate("SKINO-NoSymp", m, test_inputs, test_targets, ic, true_traj, n_long, sum(p.numel() for p in m.parameters()), tt["train_time_s"])
+    results["CKINO-NoSymp"] = _evaluate("CKINO-NoSymp", m, test_inputs, test_targets, ic, true_traj, n_long, sum(p.numel() for p in m.parameters()), tt["train_time_s"])
 
     set_global_seed(3)
     m = _FNO()
