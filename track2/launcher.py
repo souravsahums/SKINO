@@ -1,4 +1,4 @@
-"""Distributed launcher for the SKINO study.
+"""Distributed launcher for the CKINO study.
 
 The experiment matrix (problem x config x seed x budget) is embarrassingly
 parallel: no job needs to talk to any other. This launcher enumerates the full
@@ -38,21 +38,21 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
+from .experiments_paper import CONFIGS
+from .models import FAMILIES_2D, FAMILIES_3D
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results_paper")
 
-LADDER = ["advection", "heat", "wave1d", "burgers", "kdv"]
-STAGE = {"1d": LADDER, "2d": ["wave2d"], "3d": ["wave3d"]}
+LADDER = ["advection", "heat", "wave1d", "wave1d_dir", "burgers", "kdv"]
+STAGE = {"1d": LADDER, "2d": ["wave2d", "ns2d"], "3d": ["wave3d"]}
 
 CORE_CONFIGS = ["skino_noise", "strict_noise", "nosymp_noise",
                 "fno_noise", "tfno_noise", "skino_seq2seq",
                 "fno_seq2seq", "tfno_seq2seq"]
-FULL_CONFIGS = ["skino_plain", "skino_noise", "skino_pinn", "strict_plain",
-                "strict_noise", "fno_plain", "fno_noise", "fno_pinn",
-                "ufno_noise", "ufno_plain", "tfno_noise", "tfno_plain",
-                "unet_noise", "deeponet_noise",
-                "transformer_noise", "nosymp_noise", "skino_seq2seq",
-                "fno_seq2seq", "tfno_seq2seq", "ufno_seq2seq", "skino_direct"]
+# Every config the driver knows about. Derived rather than hand-listed so a new
+# family in experiments_paper.CONFIGS cannot be silently left out of the matrix.
+FULL_CONFIGS = [c[0] for c in CONFIGS]
 
 # per-stage data settings
 SETTINGS = {
@@ -62,17 +62,18 @@ SETTINGS = {
 }
 
 
-# Only skino / skino_strict / fno have >1-D implementations, so higher-dimensional
-# stages drop the 1-D-only baselines instead of scheduling no-op jobs.
-HI_D_CONFIGS = {"skino_plain", "skino_noise", "skino_pinn", "strict_plain",
-                "strict_noise", "fno_plain", "fno_noise", "fno_pinn",
-                "skino_seq2seq", "fno_seq2seq", "skino_direct"}
+# Higher-dimensional stages drop configs whose family has no >1-D implementation
+# instead of scheduling no-op jobs. Derived from the model registry, so a family
+# that gains an ND implementation is picked up here automatically.
+HI_D_CONFIGS = {c[0] for c in CONFIGS if c[1] in FAMILIES_2D}
+HI_D_CONFIGS_3D = {c[0] for c in CONFIGS if c[1] in FAMILIES_3D}
 
 
 def build_jobs(stage: str, seeds, configs, budget: int, problems=None):
     """Deterministic, sorted job list. One job == one (problem, config, seed)."""
     if stage != "1d":
-        configs = [c for c in configs if c in HI_D_CONFIGS]
+        allowed = HI_D_CONFIGS_3D if stage == "3d" else HI_D_CONFIGS
+        configs = [c for c in configs if c in allowed]
     probs = STAGE[stage] if not problems else [p for p in STAGE[stage] if p in problems]
     jobs = []
     for prob, cfg, seed in itertools.product(sorted(probs), sorted(configs), sorted(seeds)):
@@ -176,7 +177,7 @@ def main(argv=None):
     ap.add_argument("--stage", default="1d", choices=["1d", "2d", "3d"])
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--configs", nargs="*", default=None,
-                    help="default: the 6 core configs; use 'full' for all 17")
+                    help="default: the core configs; use 'full' for the whole matrix")
     ap.add_argument("--problems", nargs="*", default=None,
                     help="restrict to these equations within the stage (default: all)")
     ap.add_argument("--budget", type=int, default=25000)

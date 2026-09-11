@@ -1,4 +1,4 @@
-"""Genuinely symplectic SKINO variant.
+"""Genuinely symplectic CKINO variant.
 
 Why the original is only *pseudo*-symplectic
 --------------------------------------------
@@ -38,7 +38,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from skino.nd import LieLiftingND, cheb_eval_matrix, clenshaw_curtis_weights
+from ckino.nd import LieLiftingND, cheb_eval_matrix, clenshaw_curtis_weights
 
 
 class SymmetricSeparableKernel(nn.Module):
@@ -108,8 +108,8 @@ class StrictSymplecticBlock(nn.Module):
         return torch.cat([q, p], dim=1)
 
 
-class SKINOStrict(nn.Module):
-    """SKINO with genuinely symplectic latent dynamics."""
+class CKINOStrict(nn.Module):
+    """CKINO with genuinely symplectic latent dynamics."""
 
     def __init__(self, spatial_dims=1, n_train=32, in_channels=1, out_channels=1,
                  hidden_channels=32, rank=8, depth=4, n_generators=2, dt=0.1):

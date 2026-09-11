@@ -1,4 +1,4 @@
-"""SKINO: Symplectic Kernel-Integral Neural Operator.
+"""CKINO: Chebyshev Kernel-Integral Neural Operator.
 
 A novel physics-based neural operator with:
   * Chebyshev–rational spectral basis (no periodicity assumption).
@@ -12,14 +12,14 @@ from .kernel import LowRankKernelIntegral
 from .symplectic import SymplecticBlock
 from .hypernet import HyperNet
 from .equivariance import LieLifting
-from .model import SKINO
+from .model import CKINO
 from .nd import (
     SeparableKernelIntegralND,
     SymplecticBlockND,
     LieLiftingND,
-    SKINO_ND,
-    SKINO2D,
-    SKINO3D,
+    CKINO_ND,
+    CKINO2D,
+    CKINO3D,
     cheb_eval_matrix,
     clenshaw_curtis_weights,
 )
@@ -32,13 +32,13 @@ __all__ = [
     "SymplecticBlock",
     "HyperNet",
     "LieLifting",
-    "SKINO",
+    "CKINO",
     "SeparableKernelIntegralND",
     "SymplecticBlockND",
     "LieLiftingND",
-    "SKINO_ND",
-    "SKINO2D",
-    "SKINO3D",
+    "CKINO_ND",
+    "CKINO2D",
+    "CKINO3D",
     "cheb_eval_matrix",
     "clenshaw_curtis_weights",
 ]

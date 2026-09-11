@@ -1,4 +1,4 @@
-"""Download completed SKINO cluster-job results ON THE COMPUTE INSTANCE.
+"""Download completed CKINO cluster-job results ON THE COMPUTE INSTANCE.
 
 Run this on `skino-trigger` (inside the VNet, so it can reach the workspace
 storage; your laptop cannot). It gathers the per-config result JSONs into
@@ -21,9 +21,7 @@ import glob
 import os
 import zipfile
 
-SUBSCRIPTION = os.environ.get("AML_SUBSCRIPTION_ID", "<your-subscription-id>")
-RESOURCE_GROUP = os.environ.get("AML_RESOURCE_GROUP", "<your-resource-group>")
-WORKSPACE = os.environ.get("AML_WORKSPACE", "<your-workspace>")
+from .aml_config import get_ml_client
 
 
 def main(argv=None):
@@ -35,12 +33,12 @@ def main(argv=None):
                     help="also download fields_*.npz (large ~200 MB) into a separate zip")
     args = ap.parse_args(argv)
 
-    from azure.ai.ml import MLClient
     from azure.identity import DefaultAzureCredential
     from azure.storage.blob import BlobServiceClient
 
     cred = DefaultAzureCredential()
-    ml = MLClient(cred, SUBSCRIPTION, RESOURCE_GROUP, WORKSPACE)
+    ml = get_ml_client(cred)
+    print(f"workspace: {ml.workspace_name} (rg={ml.resource_group_name})")
 
     ds = ml.datastores.get(args.datastore)
     account = getattr(ds, "account_name", None)
@@ -66,7 +64,12 @@ def main(argv=None):
         gotf = 0
         for blob in cc.list_blobs(name_starts_with=prefix):
             base = os.path.basename(blob.name)
-            if base.startswith("paper_") and base.endswith(".json") and "_sub_" in base:
+            if base.endswith(".json") and (
+                    (base.startswith("paper_") and "_sub_" in base)
+                    or base.startswith(("darcy_", "modes_", "speedup_",
+                                        "scaling_", "discretization_",
+                                        "symplectic_defect_", "longhorizon_",
+                                        "best_width_"))):
                 data = cc.download_blob(blob.name).readall()
                 with open(os.path.join(args.out, base), "wb") as fh:
                     fh.write(data)
@@ -81,7 +84,15 @@ def main(argv=None):
                     gotf += 1
         print(f"  {j.name}: {got} json(s)" + (f", {gotf} field(s)" if args.with_fields else ""))
 
-    jsons = glob.glob(os.path.join(args.out, "paper_*_sub_*.json"))
+    jsons = (glob.glob(os.path.join(args.out, "paper_*_sub_*.json"))
+             + glob.glob(os.path.join(args.out, "darcy_*.json"))
+             + glob.glob(os.path.join(args.out, "modes_*.json"))
+             + glob.glob(os.path.join(args.out, "speedup_*.json"))
+             + glob.glob(os.path.join(args.out, "scaling_*.json"))
+             + glob.glob(os.path.join(args.out, "discretization_*.json"))
+             + glob.glob(os.path.join(args.out, "symplectic_defect_*.json"))
+             + glob.glob(os.path.join(args.out, "longhorizon_*.json"))
+             + glob.glob(os.path.join(args.out, "best_width_*.json")))
     print(f"\ngathered {len(jsons)} per-config result JSONs into {args.out}/")
     if not jsons:
         raise SystemExit("no result JSONs found - check the artifact prefix/container printed above")

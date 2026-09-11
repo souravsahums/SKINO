@@ -12,10 +12,14 @@ position-update U_q and momentum-update U_p, both implemented as
 LowRankKernelIntegral operators conditioned on an external PDE-coefficient
 embedding produced by the hypernetwork.
 
-Stoermer-Verlet is provably symplectic to second order in the step size dt.
-A composition of symplectic maps is symplectic, hence the entire SKINO
-backbone preserves a *modified* Hamiltonian to all orders (KAM / backward
-error analysis -- see proofs.md, Theorem 2).
+NOTE (2026 correction): despite the name, this block is **not** symplectic. The
+Stoermer-Verlet *template* is symplectic only when the update fields are gradient
+fields (self-adjoint Jacobian). ``LowRankKernelIntegral`` uses independent phi/psi
+and an unconstrained channel mix, so the Jacobian is not self-adjoint: the block
+is volume-preserving (unit determinant) but the measured relative symplectic
+defect is ~1.37 (see ``track2/symplectic_defect.py``). proofs.md Theorem 2 and the
+energy bound Theorem 5 are retracted. For an exactly symplectic construction on a
+non-periodic grid see ``ckino/sacheb.py`` (defect ~2e-16).
 """
 from __future__ import annotations
 

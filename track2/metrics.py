@@ -90,6 +90,40 @@ def invariant_drift(problem, pred: torch.Tensor, truth: torch.Tensor, which="ene
     return float(((a - b).abs() / (b.abs() + 1e-12)).mean())
 
 
+def energy_spectrum_error(pred: torch.Tensor, truth: torch.Tensor) -> float:
+    """Relative error of the radially-averaged power spectrum (any dimension).
+
+    Statistical / multi-scale fidelity: whether energy is distributed across
+    scales like the truth, which can hold even after pointwise correlation has
+    decayed (the right test for chaotic / long-horizon rollouts).
+    """
+    def radial(x):
+        sp = x.shape[2:]
+        xf = torch.fft.fftn(x, dim=tuple(range(2, x.dim())))
+        power = (xf.abs() ** 2).mean(dim=(0, 1))                 # (*spatial)
+        grids = torch.meshgrid(*[torch.fft.fftfreq(n).to(x.device) * n for n in sp], indexing="ij")
+        kr = torch.sqrt(sum(g ** 2 for g in grids)).round().long().reshape(-1)
+        nb = int(kr.max().item()) + 1
+        spec = torch.zeros(nb, device=x.device).index_add_(0, kr, power.reshape(-1))
+        cnt = torch.zeros(nb, device=x.device).index_add_(0, kr, torch.ones_like(power.reshape(-1)))
+        return spec / (cnt + 1e-12)
+    sp_p, sp_y = radial(pred), radial(truth)
+    return float((sp_p - sp_y).norm() / (sp_y.norm() + 1e-12))
+
+
+def histogram_distance(pred: torch.Tensor, truth: torch.Tensor, bins: int = 40) -> float:
+    """L1 distance between value histograms - a proxy for invariant-measure error."""
+    p, y = pred.reshape(-1), truth.reshape(-1)
+    if not (torch.isfinite(p).all() and torch.isfinite(y).all()):
+        return float("nan")
+    lo = float(min(p.min(), y.min())); hi = float(max(p.max(), y.max()))
+    if hi <= lo:
+        return float("nan")
+    hp = torch.histc(p, bins=bins, min=lo, max=hi); hp = hp / (hp.sum() + 1e-12)
+    hy = torch.histc(y, bins=bins, min=lo, max=hi); hy = hy / (hy.sum() + 1e-12)
+    return float((hp - hy).abs().sum())
+
+
 def classify(corr: float, ratio: float) -> str:
     """Label the failure mode from the (correlation, amplitude-ratio) pair."""
     if not np.isfinite(corr) or not np.isfinite(ratio):
@@ -132,6 +166,8 @@ def full_metrics(problem, pred_traj: torch.Tensor, truth_traj: torch.Tensor,
             "spec_high": hi,
             "energy_err": invariant_drift(problem, p, y, "energy"),
             "mass_err": invariant_drift(problem, p, y, "mass"),
+            "spec_radial": energy_spectrum_error(p, y),
+            "hist_dist": histogram_distance(p, y),
             "verdict": classify(corr, ratio),
         }
         out[str(t)] = rec

@@ -57,7 +57,7 @@ PROBLEMS = {
 # path with a resolution-bound U-Net branch, so it is a hybrid: expected to be
 # only partially invariant, and NOT used to certify the harness. skino is the
 # subject; unet is a fixed-stencil control.
-FAMILIES = ["skino", "skino_strict", "skino_nosymp", "fno", "tfno", "ufno", "unet"]
+FAMILIES = ["skino", "skino_strict", "skino_nosymp", "fno", "tfno", "ufno", "unet", "sno", "sacheb"]
 VALIDATORS = {"fno", "tfno"}
 
 
@@ -87,15 +87,6 @@ def train(model, traj, device, steps=1000, lr=1e-3, unroll=4, batch=64):
     return model
 
 
-@torch.no_grad()
-def rollout_rel_rms(model, ref, horizon):
-    """Roll the model from ref[0] and return rel-RMS at ``horizon`` vs ref."""
-    model.eval()
-    s = ref[0]
-    for _ in range(horizon):
-        s = model(s)
-    num = (s - ref[horizon]).pow(2).mean().sqrt()
-    den = ref[horizon].pow(2).mean().sqrt() + 1e-9
 @torch.no_grad()
 def onestep_rel_err(model, ref):
     """Average ONE-STEP relative error over an evaluation set.
@@ -143,7 +134,7 @@ def run(args):
         for fam in args.families:
             torch.manual_seed(args.seed)
             model, nparams, _ = build_matched(fam, 1, 1, args.n_lo, dt,
-                                               args.budget, depth=4)
+                                               args.budget, depth=4, skino_lift=args.lift_kind)
             model = model.to(device)
             train(model, traj_lo, device, steps=args.steps)
             # primary: one-step operator error (no rollout confound)
@@ -175,9 +166,9 @@ def run(args):
           f"{[(r['problem'], round(r['ratio'], 2)) for r in trained]} -> "
           + ("PLAUSIBLE (validators trained AND invariant)" if ok
              else "WEAK: no well-trained validator stayed invariant; raise --steps "
-                  "or shorten horizons before trusting any SKINO number"))
+                  "or shorten horizons before trusting any CKINO number"))
 
-    out = os.path.join(RES, f"discretization_N{args.n_lo}_N{args.n_hi}.json")
+    out = os.path.join(RES, f"discretization_N{args.n_lo}_N{args.n_hi}_{args.lift_kind}_s{args.seed}.json")
     with open(out, "w") as fh:
         json.dump({"meta": vars(args), "harness_ok": ok, "rows": rows}, fh, indent=2)
     print("wrote", out)
@@ -201,6 +192,8 @@ def main(argv=None):
     ap.add_argument("--budget", type=int, default=25000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--lift-kind", default="conv", choices=["conv", "spectral", "pointwise"],
+                    help="skino lift: conv (default, resolution-dependent) vs spectral/pointwise (invariant)")
     args = ap.parse_args(argv)
     os.makedirs(RES, exist_ok=True)
     run(args)

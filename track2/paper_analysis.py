@@ -32,7 +32,7 @@ from .metrics import amplitude_ratio, classify, pattern_correlation, rel_rms
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results_paper")
 CPS = [100, 200, 300, 400, 500]
-ORDER = ["advection", "heat", "wave1d", "burgers", "kdv", "wave2d"]
+ORDER = ["advection", "heat", "wave1d", "wave1d_dir", "burgers", "kdv", "wave2d", "ns2d"]
 CLIP = 1e3
 
 

@@ -40,7 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results_v2")
 CACHE = os.path.join(RES, "cache")
 
-# Representative subset: the two SKINO recipes, the FNO reference, and the
+# Representative subset: the two CKINO recipes, the FNO reference, and the
 # non-recursive predictor. (family, direct, noise)
 DEFAULT_CONFIGS = {
     "skino_plain": ("skino", False, 0.0),

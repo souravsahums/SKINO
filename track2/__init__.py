@@ -1,11 +1,11 @@
-"""Track 2 research program: making SKINO usable at autoregressive rollout.
+"""Track 2 research program: making CKINO usable at autoregressive rollout.
 
 Directed by Dr Gareth O'Brien. The premise (established in the seismic study)
-is that BOTH FNO and SKINO fail the long-horizon 3-D rollout, so ranking them
+is that BOTH FNO and CKINO fail the long-horizon 3-D rollout, so ranking them
 is comparing two broken things. Track 2 instead asks a single absolute
 question on *simplified, smooth* problems:
 
-    Can SKINO be trained to roll out to a useful horizon at all?
+    Can CKINO be trained to roll out to a useful horizon at all?
 
 The techniques, in the mentor's execution order, are:
 

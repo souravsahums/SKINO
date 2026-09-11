@@ -10,7 +10,7 @@ reduction (proofs.md, Theorem 4).
 We implement equivariance by lifting the input function f(x) to a
 larger feature  F(x) = [f(x), (g_1 . f)(x), ..., (g_K . f)(x)]
 where the {g_k} are Lie-group generators applied to f.  Because the
-remaining SKINO blocks are pointwise + integral against a learnable
+remaining CKINO blocks are pointwise + integral against a learnable
 *translation-equivariant* kernel, the whole pipeline is equivariant by
 construction.
 

@@ -1,6 +1,6 @@
 """Paper-grade experiment driver.
 
-Addresses the five requirements for the SKINO draft:
+Addresses the five requirements for the CKINO draft:
 
 1. RMS is not enough  -> every configuration is scored with the physics metric
    suite in :mod:`track2.metrics` (amplitude ratio, pattern correlation,
@@ -34,7 +34,7 @@ import torch
 
 from .data import build_data
 from .metrics import full_metrics, horizon_pair
-from .models import build_matched
+from .models import FAMILIES_2D, FAMILIES_3D, build_matched
 from .pde_solvers import pde_rhs
 from .train import TrainConfig, _unroll_loss
 from .experiments_v2 import train_direct
@@ -47,7 +47,7 @@ LADDER = ["advection", "heat", "wave1d", "burgers", "kdv"]
 # relative to the fastest dynamical timescale. KdV rotates its resolved modes by
 # ~2 rad per step, so (u_next-u)/dt is not a usable derivative estimate there
 # (measured trapezoidal mismatch 0.40 vs <=0.003 for every other equation).
-PINN_UNRELIABLE = {"kdv"}
+PINN_UNRELIABLE = {"kdv", "ns2d"}
 
 
 def hardware_info(device: str) -> dict:
@@ -95,7 +95,24 @@ CONFIGS = [
     ("tfno_seq2seq",      "tfno",         "seq2seq",   0.0,  0.0),
     ("ufno_seq2seq",      "ufno",         "seq2seq",   0.0,  0.0),
     ("skino_direct",      "skino",        "direct",    0.0,  0.0),
+    ("sno_plain",         "sno",          "recursive", 0.0,  0.0),
+    ("sno_noise",         "sno",          "recursive", 0.02, 0.0),
+    ("sno_seq2seq",       "sno",          "seq2seq",   0.0,  0.0),
+    ("generic_plain",     "generic",      "recursive", 0.0,  0.0),
+    ("generic_noise",     "generic",      "recursive", 0.02, 0.0),
+    ("sacheb_plain",      "sacheb",       "recursive", 0.0,  0.0),
+    ("sacheb_noise",      "sacheb",       "recursive", 0.02, 0.0),
+    ("sacheb_seq2seq",    "sacheb",       "seq2seq",   0.0,  0.0),
+    ("naive_plain",       "sacheb_naive", "recursive", 0.0,  0.0),
+    ("naive_seq2seq",     "sacheb_naive", "seq2seq",   0.0,  0.0),
+    ("purecheb_plain",    "sacheb_pure",       "recursive", 0.0, 0.0),
+    ("pureunif_plain",    "sacheb_pure_naive", "recursive", 0.0, 0.0),
 ]
+
+# Lift-free families ARE the one-step map, so they must not be wrapped in the
+# residual x + model(x) update -- that would break the symplecticity they exist
+# to demonstrate.
+PURE_FAMILIES = ("sacheb_pure", "sacheb_pure_naive")
 
 
 def train_recursive_pinn(model, data, cfg, lambda_pde: float, verbose=False, tag=""):
@@ -205,7 +222,7 @@ def rollout_any(model, mode, cfg, truth, t_out: int):
 
 def run_problem(problem, args, budget=None):
     os.makedirs(RES, exist_ok=True)
-    hi_d = problem in ("wave2d", "wave3d")
+    hi_d = problem in ("wave2d", "wave3d", "ns2d")
     n_traj = args.n_traj or (128 if hi_d else 384)
     horizon = args.horizon or (200 if hi_d else 400)
     t_out = args.t_out or horizon // 2          # common evaluation horizon
@@ -230,7 +247,10 @@ def run_problem(problem, args, budget=None):
         print(f"[shard {args.shard}/{args.num_shards}] {len(selected)} configs: "
               + ", ".join(c[0] for c in selected))
     for name, fam, mode, noise, lam_pde in selected:
-        if hi_d and fam not in ("skino", "skino_strict", "fno"):
+        if hi_d and fam not in (FAMILIES_3D if sd == 3 else FAMILIES_2D):
+            continue
+        if fam in PURE_FAMILIES and prob.n_channels != 2:
+            print(f"  [skip] {name}: {problem} is a scalar field, no canonical (q, p) split")
             continue
         if lam_pde > 0 and problem in PINN_UNRELIABLE:
             print(f"  [skip] {name}: one-step PDE residual ill-conditioned for {problem}")
@@ -240,7 +260,7 @@ def run_problem(problem, args, budget=None):
             epochs_per_k=max(round(args.epochs / 3), 1) if mode == "recursive" else args.epochs,
             stride=stride, noise_std=noise, lambda_energy=0.0, stencil=1,
             tf_start=1.0, tf_end=0.0, batch=args.batch,
-            residual=(mode == "recursive"), seed=args.seed,
+            residual=(mode == "recursive" and fam not in PURE_FAMILIES), seed=args.seed,
         )
         try:
             model, npar, wr = build_matched(

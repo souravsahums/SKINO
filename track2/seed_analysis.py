@@ -28,9 +28,14 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results_paper")
-ORDER = ["advection", "heat", "wave1d", "burgers", "kdv", "wave2d", "wave3d"]
+ORDER = ["advection", "heat", "wave1d", "wave1d_dir", "burgers", "kdv", "wave2d", "wave3d", "ns2d"]
 CLIP = 1e3
 CP = "200"    # default reporting checkpoint; overridden per problem below
+
+
+def disp(name: str) -> str:
+    """Stored config keys keep the historical ``skino_`` prefix; render as ``ckino_``."""
+    return "ckino" + name[5:] if name.startswith("skino") else name
 
 
 def collect(results_dir=None):
@@ -86,7 +91,7 @@ def tables(data, out_dir=RES):
         for name, v in rows:
             r = np.array(v["rms"], float); u = np.array(v["uh"], float)
             vs = "/".join(sorted(set(v["verdicts"])))
-            lines.append(f"| `{name}` | {v['params']:,} | {np.nanmean(r):.4g} | "
+            lines.append(f"| `{disp(name)}` | {v['params']:,} | {np.nanmean(r):.4g} | "
                          f"{np.nanstd(r):.3g} | {u.mean():.0f} | {u.std():.0f} | {vs} |")
         lines.append("")
         # significance vs the best configuration
@@ -99,9 +104,9 @@ def tables(data, out_dir=RES):
             m_, s_ = np.nanmean(v["rms"]), np.nanstd(v["rms"])
             if m_ - s_ > bm + bs:
                 sig.append(name)
-        lines += [f"Best: **`{best[0]}`** ({bm:.4g} +/- {bs:.3g}). "
+        lines += [f"Best: **`{disp(best[0])}`** ({bm:.4g} +/- {bs:.3g}). "
                   f"Significantly worse (gap exceeds combined std): "
-                  + (", ".join(f"`{s}`" for s in sig) if sig else "none")
+                  + (", ".join(f"`{disp(s)}`" for s in sig) if sig else "none")
                   + ".", ""]
     with open(os.path.join(out_dir, "TABLES_MULTISEED.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -134,7 +139,7 @@ def rollout_tables(data, out_dir=RES):
             first = np.nanmean(v["by_cp"].get(cps[0], [np.nan]))
             last = np.nanmean(v["by_cp"].get(cps[-1], [np.nan]))
             g = last / first if first and np.isfinite(first) and first > 0 else np.nan
-            lines.append(f"| `{name}` | " + " | ".join(cells) + f" | {g:.1f}x |")
+            lines.append(f"| `{disp(name)}` | " + " | ".join(cells) + f" | {g:.1f}x |")
         lines.append("")
     with open(os.path.join(out_dir, "TABLES_ROLLOUT.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines))

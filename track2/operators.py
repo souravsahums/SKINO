@@ -9,7 +9,7 @@ would expect to see:
   TFNO1D    Tensorized / factorised FNO (Kossaifi et al. 2023). The dense
             spectral weight tensor (in_c x out_c x modes) is replaced by a
             rank-R CP factorisation, which is where FNO's parameter blow-up
-            comes from - the fairest "efficient FNO" competitor to SKINO.
+            comes from - the fairest "efficient FNO" competitor to CKINO.
   UNet1D    Classical convolutional encoder-decoder; the standard non-spectral
             baseline.
   DeepONet1DMC  Multi-channel DeepONet (branch/trunk), generalising the

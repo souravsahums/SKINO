@@ -15,7 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, "kaggle_bundle")
 
-PACKAGES = ["track2", "skino", "validation"]
+PACKAGES = ["track2", "ckino", "validation"]
 SKIP_DIRS = {"__pycache__", ".ipynb_checkpoints", "results", "results_v2",
              "results_paper", "results_gpu", "results_azureml", "cache", "figures",
              "output2", "models", "video"}
@@ -25,7 +25,10 @@ SKIP_EXT = {".npz", ".pt", ".mp4", ".zip", ".png", ".log", ".csv"}
 def _filter(_dir, names):
     drop = []
     for n in names:
-        if n in SKIP_DIRS or os.path.splitext(n)[1].lower() in SKIP_EXT:
+        full = os.path.join(_dir, n)
+        if (n in SKIP_DIRS
+                or (os.path.isdir(full) and n.startswith("results"))
+                or os.path.splitext(n)[1].lower() in SKIP_EXT):
             drop.append(n)
     return drop
 
@@ -45,7 +48,7 @@ def main():
         for f in fs:
             n_files += 1
             total += os.path.getsize(os.path.join(r, f))
-    archive = shutil.make_archive(os.path.join(ROOT, "skino_code"), "zip", OUT)
+    archive = shutil.make_archive(os.path.join(ROOT, "ckino_code"), "zip", OUT)
 
     print(f"bundle : {OUT}")
     print(f"files  : {n_files}   size: {total/1e6:.2f} MB")
@@ -53,7 +56,7 @@ def main():
     for pkg in PACKAGES:
         c = sum(len(fs) for _, _, fs in os.walk(os.path.join(OUT, pkg)))
         print(f"   {pkg:12s} {c:3d} files")
-    print("\nUpload skino_code.zip to Kaggle -> Datasets -> New Dataset.")
+    print("\nUpload ckino_code.zip to Kaggle -> Datasets -> New Dataset.")
 
 
 if __name__ == "__main__":

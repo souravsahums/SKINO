@@ -1,4 +1,4 @@
-"""Toy demo: train SKINO on the 1-D viscous Burgers' equation.
+"""Toy demo: train CKINO on the 1-D viscous Burgers' equation.
 
 We learn the solution operator
     G_mu : u_0(x)  ->  u(x, T)
@@ -19,7 +19,7 @@ import math
 import torch
 
 from .basis import ChebyshevBasis
-from .model import SKINO
+from .model import CKINO
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ def main() -> None:
     u0_tr, uT_tr, nu_tr = make_dataset(args.n_train)
     u0_te, uT_te, nu_te = make_dataset(args.n_test)
 
-    model = SKINO(
+    model = CKINO(
         n_modes=args.n_modes,
         in_channels=1,
         out_channels=1,

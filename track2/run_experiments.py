@@ -1,6 +1,6 @@
 """Ablation orchestrator: show what each Track-2 ingredient buys at rollout.
 
-Trains a shared-data set of SKINO configurations and evaluates each with the
+Trains a shared-data set of CKINO configurations and evaluates each with the
 RMS-vs-horizon / breakdown-point protocol, so the effect of every Phase-1
 ingredient is isolated:
 

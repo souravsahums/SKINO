@@ -7,7 +7,7 @@ recipe is to concatenate mu as an extra input channel.  This wastes
 parameters and gives no inductive bias.
 
 A *hypernetwork* H_psi : M -> Theta directly emits a low-dimensional code
-that modulates every SKINO block.  Two consequences:
+that modulates every CKINO block.  Two consequences:
 
 1.  At inference time, swapping mu costs a single forward pass through
     H_psi, not a re-training.  This is the classic meta-learning win.

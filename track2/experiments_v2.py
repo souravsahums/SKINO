@@ -7,7 +7,7 @@ Protocol
 3. RMS vs. rollout time for every operator, cross-validated against (2).
 4. Repeated on a nonlinear equation (KdV).
 5. Repeated for other neural operators: FNO, a PDE-transformer, and the
-   no-symplectic SKINO ablation.
+   no-symplectic CKINO ablation.
 6. Compared against a NON-RECURSIVE (direct, horizon-conditioned) predictor
    that maps (u_t0, T) -> u_{t0+T} in one shot, forming no feedback loop.
 7. Repeated in 2-D (wave2d) using the same driver.

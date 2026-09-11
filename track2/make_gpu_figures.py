@@ -26,7 +26,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 GPU = os.path.join(HERE, "results_gpu")
 CPU = os.path.join(HERE, "results_paper")
-ORDER = ["advection", "heat", "wave1d", "burgers", "kdv", "wave2d", "wave3d"]
+ORDER = ["advection", "heat", "wave1d", "wave1d_dir", "burgers", "kdv", "wave2d", "wave3d", "ns2d"]
 
 VERDICT_RANK = {"good": 0, "degraded": 1, "decorrelated": 2, "amplitude-collapse": 3,
                 "dead": 4, "diverged": 5, "blow-up": 5}

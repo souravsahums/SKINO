@@ -150,6 +150,100 @@ class WaveProblem:
 # 1-D Korteweg-de Vries  u_t + 6 u u_x - u_xxx = 0  (nonlinear, solitons)
 # ---------------------------------------------------------------------------
 @dataclass
+class WaveDirichletProblem:
+    """Wave equation on [0, L] with homogeneous DIRICHLET boundaries.
+
+    Reproduces the benchmark used by the concurrent Symplectic Neural Operator
+    (Makara-Yaguchi 2026): uniform grid, centred finite differences in space,
+    symplectic leap-frog in time, and initial conditions multiplied by the
+    envelope x(L-x) so that u(0) = u(L) = 0.
+
+    It is Hamiltonian (so symplecticity is meaningful) *and* non-periodic (so a
+    Fourier-parameterised operator is structurally mismatched) -- the setting
+    that separates a Chebyshev operator from a Fourier one.
+    """
+
+    name: str = "wave1d_dir"
+    grid_n: int = 64
+    length: float = 1.0
+    c: float = 1.0
+    dt: float = 0.005
+    n_inner: int = 4
+    n_channels: int = 2
+
+    @property
+    def dx(self) -> float:
+        return self.length / (self.grid_n - 1)
+
+    def grid(self, device=None) -> torch.Tensor:
+        return torch.linspace(0.0, self.length, self.grid_n, device=device)
+
+    def _uxx(self, u: torch.Tensor) -> torch.Tensor:
+        """Centred second difference with u = 0 outside the domain."""
+        pad = torch.nn.functional.pad(u, (1, 1))
+        return (pad[..., 2:] - 2.0 * u + pad[..., :-2]) / (self.dx ** 2)
+
+    @staticmethod
+    def _clamp_bc(u: torch.Tensor, v: torch.Tensor):
+        u = u.clone(); v = v.clone()
+        u[..., 0] = 0.0; u[..., -1] = 0.0
+        v[..., 0] = 0.0; v[..., -1] = 0.0
+        return u, v
+
+    def true_step(self, state: torch.Tensor) -> torch.Tensor:
+        u, v = state[:, 0, :], state[:, 1, :]
+        dt = self.dt / self.n_inner
+        c2 = self.c ** 2
+        for _ in range(self.n_inner):
+            v = v + 0.5 * dt * c2 * self._uxx(u)
+            u = u + dt * v
+            v = v + 0.5 * dt * c2 * self._uxx(u)
+            u, v = self._clamp_bc(u, v)
+        return torch.stack([u, v], dim=1)
+
+    def energy(self, state: torch.Tensor) -> torch.Tensor:
+        u, v = state[..., 0, :], state[..., 1, :]
+        ux = (u[..., 1:] - u[..., :-1]) / self.dx
+        return 0.5 * ((v ** 2).sum(-1) * self.dx + (self.c ** 2) * (ux ** 2).sum(-1) * self.dx)
+
+    def mass(self, state: torch.Tensor) -> torch.Tensor:
+        return state[..., 0, :].sum(-1) * self.dx
+
+    def random_ic(self, n_batch: int, seed: int) -> torch.Tensor:
+        g = torch.Generator().manual_seed(seed)
+        x = self.grid()
+        xi = 2.0 * x / self.length - 1.0                      # map to [-1, 1]
+        env = (x * (self.length - x))                          # Dirichlet envelope
+        env = env / (env.max() + 1e-12)
+        K = 3
+        cu = 2 * torch.rand(n_batch, K + 1, generator=g) - 1
+        cv = 2 * torch.rand(n_batch, K + 1, generator=g) - 1
+        u = torch.zeros(n_batch, self.grid_n)
+        v = torch.zeros(n_batch, self.grid_n)
+        for k in range(K + 1):                                  # truncated Chebyshev series
+            Tk = torch.cos(k * torch.arccos(xi.clamp(-1.0, 1.0))).unsqueeze(0)
+            decay = 1.0 / (1.0 + k) ** 2                        # bound the gradient energy
+            u = u + decay * cu[:, k:k + 1] * Tk
+            v = v + decay * cv[:, k:k + 1] * Tk
+        u = 0.4 * (u * env) / ((u * env).abs().amax(-1, keepdim=True) + 1e-6)
+        v = 0.05 * (v * env) / ((v * env).abs().amax(-1, keepdim=True) + 1e-6)
+        u, v = self._clamp_bc(u, v)
+        return torch.stack([u, v], dim=1).float()
+
+    @torch.no_grad()
+    def rollout(self, ic: torch.Tensor, n_steps: int) -> torch.Tensor:
+        traj = [ic.clone()]
+        s = ic
+        for _ in range(n_steps):
+            s = self.true_step(s)
+            traj.append(s.clone())
+        return torch.stack(traj, dim=0)
+
+
+# ---------------------------------------------------------------------------
+# 1-D Korteweg-de Vries  u_t + 6 u u_x - u_xxx = 0  (nonlinear, solitons)
+# ---------------------------------------------------------------------------
+@dataclass
 class KdVProblem:
     """1-D KdV in the form actually integrated here:  u_t + 6 u u_x - u_xxx = 0
 
@@ -401,6 +495,7 @@ PROBLEMS = {
     "advection": AdvectionProblem,
     "heat": HeatProblem,
     "wave1d": WaveProblem,
+    "wave1d_dir": WaveDirichletProblem,
     "burgers": BurgersProblem,
     "kdv": KdVProblem,
 }
@@ -436,6 +531,9 @@ def pde_rhs(problem, state: torch.Tensor) -> torch.Tensor:
     if name == "wave1d":
         u, v = state[:, 0], state[:, 1]
         return torch.stack([v, (problem.c ** 2) * dx(u, 2)], dim=1)
+    if name == "wave1d_dir":
+        u, v = state[:, 0], state[:, 1]
+        return torch.stack([v, (problem.c ** 2) * problem._uxx(u)], dim=1)
     if name == "wave2d":
         u, v = state[:, 0], state[:, 1]
         n = u.shape[-1]
@@ -447,6 +545,21 @@ def pde_rhs(problem, state: torch.Tensor) -> torch.Tensor:
     if name == "wave3d":
         u, v = state[:, 0], state[:, 1]
         return torch.stack([v, (problem.c ** 2) * problem._lap(u)], dim=1)
+    if name == "ns2d":
+        w = state[:, 0]
+        n = w.shape[-1]
+        k = torch.fft.fftfreq(n, d=L / n).to(w.device) * 2 * math.pi
+        KX, KY = torch.meshgrid(k, k, indexing="ij")
+        K2 = KX ** 2 + KY ** 2
+        inv = torch.where(K2 == 0, torch.zeros_like(K2), 1.0 / K2)
+        w_hat = torch.fft.fft2(w, dim=(-2, -1))
+        psi_hat = w_hat * inv
+        u = torch.fft.ifft2(1j * KY * psi_hat, dim=(-2, -1)).real
+        v = torch.fft.ifft2(-1j * KX * psi_hat, dim=(-2, -1)).real
+        wx = torch.fft.ifft2(1j * KX * w_hat, dim=(-2, -1)).real
+        wy = torch.fft.ifft2(1j * KY * w_hat, dim=(-2, -1)).real
+        lap = torch.fft.ifft2(-K2 * w_hat, dim=(-2, -1)).real
+        return (-(u * wx + v * wy) + problem.nu * lap).unsqueeze(1)
     raise KeyError(name)
 
 
@@ -530,6 +643,96 @@ class Wave2DProblem:
 
 
 PROBLEMS["wave2d"] = Wave2DProblem
+
+
+# ---------------------------------------------------------------------------
+# 2-D incompressible Navier-Stokes, vorticity form  (the canonical FNO bench)
+#   w_t + (u . grad) w = nu * lap(w),   u = grad^perp psi,   lap(psi) = -w
+# Decaying turbulence on the periodic torus; pseudo-spectral, 2/3 dealiased,
+# viscosity integrated exactly (ETD-RK2). Vorticity is a single channel.
+# ---------------------------------------------------------------------------
+@dataclass
+class NavierStokes2DProblem:
+    name: str = "ns2d"
+    grid_n: int = 64
+    length: float = 2.0
+    nu: float = 3e-3
+    dt: float = 0.01
+    n_inner: int = 4
+    n_channels: int = 1
+    spatial_dims: int = 2
+
+    def _spectral(self, n: int, device):
+        k = torch.fft.fftfreq(n, d=self.length / n).to(device) * 2 * math.pi
+        KX, KY = torch.meshgrid(k, k, indexing="ij")
+        K2 = KX ** 2 + KY ** 2
+        inv = torch.where(K2 == 0, torch.zeros_like(K2), 1.0 / K2)   # streamfn has no mean mode
+        kmax = k.abs().max()
+        mask = ((KX.abs() <= (2.0 / 3.0) * kmax) & (KY.abs() <= (2.0 / 3.0) * kmax)).to(K2.dtype)
+        return KX, KY, K2, inv, mask
+
+    def _nonlinear(self, w_hat, KX, KY, inv, mask):
+        """Spectral convection N(w) = -(u . grad) w, dealiased."""
+        psi_hat = w_hat * inv
+        u = torch.fft.ifft2(1j * KY * psi_hat, dim=(-2, -1)).real
+        v = torch.fft.ifft2(-1j * KX * psi_hat, dim=(-2, -1)).real
+        wx = torch.fft.ifft2(1j * KX * w_hat, dim=(-2, -1)).real
+        wy = torch.fft.ifft2(1j * KY * w_hat, dim=(-2, -1)).real
+        return torch.fft.fft2(-(u * wx + v * wy), dim=(-2, -1)) * mask
+
+    def true_step(self, state: torch.Tensor) -> torch.Tensor:
+        w = state[:, 0]
+        n = w.shape[-1]
+        KX, KY, K2, inv, mask = self._spectral(n, w.device)
+        L = -self.nu * K2
+        dt = self.dt / self.n_inner
+        eL = torch.exp(L * dt)
+        Ls = torch.where(L == 0, torch.ones_like(L), L)
+        phi1 = torch.where(L == 0, torch.full_like(L, dt), (eL - 1.0) / Ls)
+        phi2 = torch.where(L == 0, torch.full_like(L, dt / 2.0),
+                           (eL - 1.0 - L * dt) / (Ls ** 2 * dt))
+        w_hat = torch.fft.fft2(w, dim=(-2, -1))
+        for _ in range(self.n_inner):
+            Nw = self._nonlinear(w_hat, KX, KY, inv, mask)
+            a_hat = eL * w_hat + phi1 * Nw
+            Na = self._nonlinear(a_hat, KX, KY, inv, mask)
+            w_hat = a_hat + phi2 * (Na - Nw)
+        return torch.fft.ifft2(w_hat, dim=(-2, -1)).real.unsqueeze(1)
+
+    def energy(self, state: torch.Tensor) -> torch.Tensor:
+        """Enstrophy int w^2 dx (decays under viscosity)."""
+        w = state[..., 0, :, :]
+        return (w ** 2).sum((-2, -1)) * (self.length / w.shape[-1]) ** 2
+
+    def mass(self, state: torch.Tensor) -> torch.Tensor:
+        w = state[..., 0, :, :]
+        return w.sum((-2, -1)) * (self.length / w.shape[-1]) ** 2
+
+    def random_ic(self, n_batch: int, seed: int) -> torch.Tensor:
+        g = torch.Generator().manual_seed(seed)
+        x = torch.linspace(-1.0, 1.0, self.grid_n + 1)[:-1] * (self.length / 2.0)
+        X, Y = torch.meshgrid(x, x, indexing="ij")
+        w = torch.zeros(n_batch, self.grid_n, self.grid_n)
+        K = 4  # low modes only -> band-limited, resolved on grid_n
+        for kx in range(1, K + 1):
+            for ky in range(1, K + 1):
+                a = 2 * torch.rand(n_batch, 1, 1, generator=g) - 1
+                b = 2 * torch.rand(n_batch, 1, 1, generator=g) - 1
+                w = (w + a * (torch.sin(math.pi * kx * X) * torch.cos(math.pi * ky * Y)).unsqueeze(0)
+                       + b * (torch.cos(math.pi * kx * X) * torch.sin(math.pi * ky * Y)).unsqueeze(0))
+        w = w - w.mean((-2, -1), keepdim=True)                       # zero-mean vorticity
+        w = 0.8 * w / (w.abs().amax((-2, -1), keepdim=True) + 1e-6)
+        return w.unsqueeze(1).float()
+
+    @torch.no_grad()
+    def rollout(self, ic: torch.Tensor, n_steps: int) -> torch.Tensor:
+        traj, s = [ic.clone()], ic
+        for _ in range(n_steps):
+            s = self.true_step(s); traj.append(s.clone())
+        return torch.stack(traj, dim=0)
+
+
+PROBLEMS["ns2d"] = NavierStokes2DProblem
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Top-level SKINO model.
+"""Top-level CKINO model.
 
 Pipeline
 --------
@@ -33,8 +33,8 @@ from .hypernet import HyperNet
 from .symplectic import SymplecticBlock
 
 
-class SKINO(nn.Module):
-    """Symplectic Kernel-Integral Neural Operator (1-D scalar field version).
+class CKINO(nn.Module):
+    """Chebyshev Kernel-Integral Neural Operator (1-D scalar field version).
 
     Parameters
     ----------

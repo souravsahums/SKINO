@@ -10,8 +10,8 @@ Implements, in one uniform unroll loop:
                            trajectory* at every step (relative). For the
                            conservative wave/KdV problems this is an energy-
                            conservation prior; for a dissipative problem it
-                           matches the decay envelope. Motivated by SKINO being
-                           only pseudo-symplectic (no exact invariant).
+                           matches the decay envelope. Motivated by CKINO being
+                           only Chebyshev kernel-integral (no exact invariant).
   (5) extended horizon   -- a K-curriculum (e.g. 1 -> 2 -> 4 -> 8 -> 16) split
                            evenly across the epoch budget.
   (6) two-step stencil   -- optional (u_{t-1}, u_t) -> u_{t+1} input.
@@ -32,7 +32,7 @@ from typing import List
 
 import torch
 
-from skino.nd import SKINO_ND
+from ckino.nd import CKINO_ND
 
 from .data import PDEData, build_data
 
@@ -44,7 +44,7 @@ class TrainConfig:
     rank: int = 8
     depth: int = 4
     n_train: int = 0            # 0 -> default to grid_n
-    dt_divisor: float = 4.0     # SKINO internal leap-frog dt = problem.dt / this
+    dt_divisor: float = 4.0     # CKINO internal leap-frog dt = problem.dt / this
     residual: bool = True       # pred = x_current + net(input)
     # curriculum / recipe
     stencil: int = 1            # (6) 1 or 2
@@ -64,13 +64,13 @@ class TrainConfig:
     seed: int = 0
 
 
-def build_model(data: PDEData, cfg: TrainConfig) -> SKINO_ND:
+def build_model(data: PDEData, cfg: TrainConfig) -> CKINO_ND:
     prob = data.problem
     n_train = cfg.n_train if cfg.n_train > 0 else prob.grid_n
     hidden = cfg.hidden_channels
     if hidden % 2:
         hidden += 1
-    return SKINO_ND(
+    return CKINO_ND(
         spatial_dims=1,
         n_train=n_train,
         in_channels=cfg.stencil * prob.n_channels,

@@ -1,4 +1,4 @@
-"""Resolution-agnostic, dimension-agnostic SKINO components.
+"""Resolution-agnostic, dimension-agnostic CKINO components.
 
 Why a separate module from the 1-D code?
 -----------------------------------------
@@ -13,7 +13,7 @@ In this module we store them as **Chebyshev coefficients**
 which is a continuous representation: the same trained parameters can be
 evaluated on a CGL grid of any size N' >= N (and even N' < N, with the
 expected truncation error).  This is precisely the property that makes
-FNO claim "discretisation invariance" — except SKINO inherits it on
+FNO claim "discretisation invariance" — except CKINO inherits it on
 *non-periodic* domains, which FNO cannot.
 
 For d > 1 we use a **separable** rank-R kernel
@@ -201,7 +201,7 @@ class SymplecticBlockND(nn.Module):
         self.U_q = SeparableKernelIntegralND(spatial_dims, n_train, self.half, rank)
         self.U_p = SeparableKernelIntegralND(spatial_dims, n_train, self.half, rank)
         # FiLM modulation by an external code (see HyperNet).  Zero-init keeps
-        # the block exactly symplectic at t = 0 (identity modulation).
+        # the block an identity modulation at t = 0.
         self.gamma_q = nn.Linear(1, self.half, bias=False)
         self.gamma_p = nn.Linear(1, self.half, bias=False)
         nn.init.zeros_(self.gamma_q.weight)
@@ -238,7 +238,7 @@ class LieLiftingND(nn.Module):
     combinations build dilations and rotations.
     """
 
-    def __init__(self, spatial_dims: int, in_channels: int, out_channels: int, n_generators: int = 2, kernel_size: int = 5):
+    def __init__(self, spatial_dims: int, in_channels: int, out_channels: int, n_generators: int = 2, kernel_size: int = 5, lift_kind: str = "conv"):
         super().__init__()
         if kernel_size % 2 != 1:
             raise ValueError("kernel_size must be odd")
@@ -246,11 +246,24 @@ class LieLiftingND(nn.Module):
         self.in_c = in_channels
         self.n_gen = n_generators
         self.k = kernel_size
-        # Depthwise kernel of shape (n_gen, in_c, k, k, ..., k).
-        kshape = (n_generators, in_channels) + (kernel_size,) * spatial_dims
-        self.gen_kernels = nn.Parameter(0.01 * torch.randn(*kshape))
+        self.lift_kind = lift_kind
+        if lift_kind == "conv":
+            # Depthwise fixed-stencil kernel (n_gen, in_c, k, ...): resolution-DEPENDENT.
+            kshape = (n_generators, in_channels) + (kernel_size,) * spatial_dims
+            self.gen_kernels = nn.Parameter(0.01 * torch.randn(*kshape))
+            n_branches = n_generators + 1
+        elif lift_kind == "spectral":
+            # FFT-derivative generators: resolution-invariant on periodic grids (1-D).
+            if spatial_dims != 1:
+                raise ValueError("spectral lift is implemented for 1-D only")
+            self.gen_scale = nn.Parameter(0.1 * torch.randn(n_generators, in_channels))
+            n_branches = n_generators + 1
+        elif lift_kind == "pointwise":
+            n_branches = 1  # identity only; trivially resolution-invariant
+        else:
+            raise ValueError(f"unknown lift_kind {lift_kind!r}")
         Conv = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[spatial_dims]
-        self.proj = Conv(in_channels * (n_generators + 1), out_channels, kernel_size=1)
+        self.proj = Conv(in_channels * n_branches, out_channels, kernel_size=1)
 
     def _antisym(self) -> torch.Tensor:
         k = self.gen_kernels
@@ -260,7 +273,26 @@ class LieLiftingND(nn.Module):
             rev = torch.flip(rev, dims=[axis])
         return 0.5 * (k - rev)
 
+    def _spectral_branches(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, C, N) periodic uniform. Spectral derivatives are resolution-invariant:
+        # mode k maps to the same physical frequency at any N, so d/dx is grid-agnostic.
+        n = x.shape[-1]
+        xf = torch.fft.rfft(x, dim=-1)
+        k = torch.fft.rfftfreq(n, d=1.0 / n, device=x.device, dtype=x.dtype)
+        ik = 1j * 2.0 * math.pi * k  # derivative multiplier on domain length 1
+        branches = [x]
+        deriv = xf
+        for g in range(self.n_gen):
+            deriv = deriv * ik  # escalating derivative order (1st, 2nd, ...)
+            d_g = torch.fft.irfft(deriv, n=n, dim=-1) * self.gen_scale[g].view(1, -1, 1)
+            branches.append(d_g)
+        return torch.cat(branches, dim=1)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.lift_kind == "pointwise":
+            return self.proj(x)
+        if self.lift_kind == "spectral":
+            return self.proj(self._spectral_branches(x))
         branches = [x]
         kern = self._antisym()
         pad = self.k // 2
@@ -274,8 +306,8 @@ class LieLiftingND(nn.Module):
 # ---------------------------------------------------------------------------
 # Top-level ND model.
 # ---------------------------------------------------------------------------
-class SKINO_ND(nn.Module):
-    """Resolution-agnostic SKINO in 1, 2 or 3 spatial dimensions.
+class CKINO_ND(nn.Module):
+    """Resolution-agnostic CKINO in 1, 2 or 3 spatial dimensions.
 
     Parameters
     ----------
@@ -313,6 +345,7 @@ class SKINO_ND(nn.Module):
         pde_param_dim: int = 0,
         n_generators: int = 2,
         dt: float = 0.1,
+        lift_kind: str = "conv",
     ):
         super().__init__()
         if hidden_channels % 2 != 0:
@@ -321,7 +354,7 @@ class SKINO_ND(nn.Module):
 
         from .hypernet import HyperNet
 
-        self.lift = LieLiftingND(spatial_dims, in_channels, hidden_channels, n_generators=n_generators)
+        self.lift = LieLiftingND(spatial_dims, in_channels, hidden_channels, n_generators=n_generators, lift_kind=lift_kind)
         self.hyper = HyperNet(pde_param_dim, out_dim=1) if pde_param_dim > 0 else None
         self.blocks = nn.ModuleList(
             [SymplecticBlockND(spatial_dims, n_train, hidden_channels, rank, dt=dt) for _ in range(depth)]
@@ -338,12 +371,12 @@ class SKINO_ND(nn.Module):
 
 
 # Convenience aliases.
-def SKINO2D(*args, **kwargs):
-    """SKINO in 2 spatial dimensions (positional args identical to ``SKINO_ND``
+def CKINO2D(*args, **kwargs):
+    """CKINO in 2 spatial dimensions (positional args identical to ``CKINO_ND``
     minus the ``spatial_dims`` argument)."""
-    return SKINO_ND(2, *args, **kwargs)
+    return CKINO_ND(2, *args, **kwargs)
 
 
-def SKINO3D(*args, **kwargs):
-    """SKINO in 3 spatial dimensions."""
-    return SKINO_ND(3, *args, **kwargs)
+def CKINO3D(*args, **kwargs):
+    """CKINO in 3 spatial dimensions."""
+    return CKINO_ND(3, *args, **kwargs)

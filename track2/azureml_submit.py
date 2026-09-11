@@ -1,4 +1,4 @@
-"""Submit the SKINO study to Azure ML.
+"""Submit the CKINO study to Azure ML.
 
 The experiment matrix is embarrassingly parallel, so this submits one command
 job per shard; each job runs :mod:`track2.launcher` over its slice and writes
@@ -26,9 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 
-SUBSCRIPTION = os.environ.get("AML_SUBSCRIPTION_ID", "<your-subscription-id>")
-RESOURCE_GROUP = os.environ.get("AML_RESOURCE_GROUP", "<your-resource-group>")
-WORKSPACE = os.environ.get("AML_WORKSPACE", "<your-workspace>")
+from .aml_config import get_ml_client, workspace_label
 
 # name -> (GPUs per node, approx USD/hour) for the clusters in this workspace
 CLUSTERS = {
@@ -91,7 +89,7 @@ def main(argv=None):
     gpus, rate = CLUSTERS[args.cluster]
     jobs, minutes, cost = estimate(args.stage, args.shards, gpus, rate)
 
-    print(f"workspace   : {WORKSPACE}  (rg={RESOURCE_GROUP})")
+    print(f"workspace   : {workspace_label()}")
     print(f"cluster     : {args.cluster}  {gpus} GPU/node  ~${rate:.2f}/node-hour")
     print(f"stage       : {args.stage}   matrix jobs: {jobs}")
     print(f"shards      : {args.shards}  -> {jobs/max(args.shards,1):.0f} jobs each, "
@@ -107,11 +105,11 @@ def main(argv=None):
                                                    args.seeds, args.smoke, args.save_fields))
         return
 
-    from azure.ai.ml import MLClient, command
+    from azure.ai.ml import command
     from azure.identity import DefaultAzureCredential
 
-    ml = MLClient(DefaultAzureCredential(), SUBSCRIPTION, RESOURCE_GROUP, WORKSPACE)
-    print(f"\nconnected to {ml.workspace_name}")
+    ml = get_ml_client(DefaultAzureCredential())
+    print(f"\nconnected to {ml.workspace_name} (rg={ml.resource_group_name})")
 
     if args.download:
         for j in ml.jobs.list(max_results=50):
