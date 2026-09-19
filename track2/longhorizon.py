@@ -84,14 +84,18 @@ def log_checkpoints(n_steps: int, per_decade: int = 12) -> list:
 
 
 @torch.no_grad()
-def stream_rollout(model, data, cfg, n_steps: int, checkpoints, n_test: int = 8):
+def stream_rollout(model, data, cfg, n_steps: int, checkpoints, n_test: int = 8,
+                   snap_at=(), snap_traj: int = 2):
     """Advance model and reference solver in lockstep; return per-checkpoint metrics.
 
-    Memory is O(1) in ``n_steps`` -- nothing but the current state is retained.
+    Memory is O(1) in ``n_steps`` -- nothing but the current state is retained,
+    except the few snapshots requested in ``snap_at`` (kept so the long rollout
+    can be shown as fields, not just curves).
     """
     prob = data.problem
     model.eval()
     ckpt = set(checkpoints)
+    want = set(snap_at)
 
     phys = data.test_traj[:n_test, 0].contiguous()          # (B, C, *grid) physical
     truth = data.normalize(phys, channel_dim=1)
@@ -100,7 +104,7 @@ def stream_rollout(model, data, cfg, n_steps: int, checkpoints, n_test: int = 8)
 
     e0_model = prob.energy(data.denormalize(x, channel_dim=1))
     e0_true = prob.energy(phys)
-    rows, diverged_at = [], None
+    rows, diverged_at, snaps = [], None, {}
 
     for t in range(1, n_steps + 1):
         phys = prob.true_step(phys)
@@ -108,6 +112,10 @@ def stream_rollout(model, data, cfg, n_steps: int, checkpoints, n_test: int = 8)
         if not torch.isfinite(x).all():
             diverged_at = diverged_at or t
         x = torch.nan_to_num(x, nan=0.0, posinf=1e6, neginf=-1e6).clamp(-1e6, 1e6)
+
+        if t in want:
+            snaps[t] = (x[:snap_traj].cpu().numpy(),
+                        data.normalize(phys, channel_dim=1)[:snap_traj].cpu().numpy())
 
         if t in ckpt:
             ref = data.normalize(phys, channel_dim=1)
@@ -126,7 +134,7 @@ def stream_rollout(model, data, cfg, n_steps: int, checkpoints, n_test: int = 8)
                 "amp_ratio": float((x.flatten(1).std(1) / (ref.flatten(1).std(1) + 1e-12)).mean()),
                 "pattern_corr": float(corr.mean()),
             })
-    return rows, diverged_at
+    return rows, diverged_at, snaps
 
 
 def secular_slope(rows, lo_frac: float = 0.1) -> float:
@@ -162,6 +170,9 @@ def main(argv=None):
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--stride", type=int, default=20)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--snap-at", type=int, nargs="*",
+                    default=[10, 100, 1000, 5000, 20000],
+                    help="steps at which to keep the field itself, for figures")
     ap.add_argument("--device", default="cpu")
     a = ap.parse_args(argv)
 
@@ -177,6 +188,7 @@ def main(argv=None):
     if not hasattr(prob, "energy"):
         raise SystemExit(f"{a.problem} has no energy invariant; long-horizon drift is undefined")
     ckpts = log_checkpoints(a.steps)
+    snaps_at = [s for s in a.snap_at if s <= a.steps]
     allowed = {1: FAMILIES_1D, 2: FAMILIES_2D, 3: FAMILIES_3D}[sd]
     skipped = [f for f in a.families if f not in allowed]
     a.families = [f for f in a.families if f in allowed]
@@ -193,7 +205,9 @@ def main(argv=None):
 
     out = {"_meta": {"problem": f"longhorizon_{a.problem}", "steps": a.steps,
                      "budget": a.budget, "seed": a.seed, "n_test": a.n_test,
-                     "checkpoints": ckpts, "hardware": hardware_info(dev)}}
+                     "checkpoints": ckpts, "snap_at": snaps_at,
+                     "hardware": hardware_info(dev)}}
+    field_store = {}
     for fam in a.families:
         cfg = TrainConfig(k_schedule=[1, 2, 4], epochs_per_k=max(round(a.epochs / 3), 1),
                           stride=a.stride, noise_std=0.0, lambda_energy=0.0, stencil=1,
@@ -213,7 +227,11 @@ def main(argv=None):
             print(f"    {FAMILY_LABEL.get(fam, fam)}")
             t0 = time.time()
             train_recursive_pinn(model, data, cfg, 0.0, tag=fam)
-            rows, div = stream_rollout(model, data, cfg, a.steps, ckpts, a.n_test)
+            rows, div, snaps = stream_rollout(model, data, cfg, a.steps, ckpts,
+                                              a.n_test, snap_at=snaps_at)
+            for t, (pred, ref) in snaps.items():
+                field_store[f"{fam}__pred__{t}"] = pred
+                field_store[f"{fam}__truth__{t}"] = ref
             out[fam] = {"params": npar, "width": list(wr), "diverged_at": div,
                         "label": FAMILY_LABEL.get(fam, fam),
                         "symplectic_end_to_end": fam in PURE,
@@ -235,6 +253,11 @@ def main(argv=None):
     with open(os.path.join(RES, f"{tag}.json"), "w") as f:
         json.dump(out, f, indent=2)
     print(f"\n[saved] {tag}.json")
+    if field_store:
+        fp = os.path.join(RES, f"lhfields_{a.problem}_s{a.seed}.npz")
+        np.savez_compressed(fp, **field_store)
+        print(f"[saved] {os.path.basename(fp)} "
+              f"({os.path.getsize(fp) // 1024} KB, {len(field_store) // 2} snapshots)")
     return out
 
 

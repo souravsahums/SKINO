@@ -1,6 +1,5 @@
 % ============================================================================
-%  The Weight of the Adjoint
-%  TMLR submission draft
+%  The Weight of the Adjoint  -- TMLR submission
 % ============================================================================
 \documentclass[11pt]{article}
 
@@ -16,6 +15,8 @@
 \usepackage[round,authoryear]{natbib}
 \usepackage[colorlinks=true,linkcolor=blue!55!black,citecolor=blue!55!black,urlcolor=blue!55!black]{hyperref}
 \usepackage{caption}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds,calc,shapes.geometric}
 \captionsetup{font=small,labelfont=bf}
 
 \newtheorem{theorem}{Theorem}
@@ -29,13 +30,23 @@
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\iprod}[2]{\langle #1, #2 \rangle}
 \newcommand{\defect}{\mathcal{D}}
+\newcommand{\Wc}{W_{\mathrm{cheb}}}
+\newcommand{\Wu}{W_{\mathrm{unif}}}
 \newcommand{\sacheb}{\textsc{SA-Cheb}}
 \newcommand{\ckino}{\textsc{CKINO}}
-\newcommand{\naive}{\textsc{NaiveAdj}}
+
+% --- palette shared with the figures -----------------------------------------
+\definecolor{cCheb}{HTML}{C1272D}
+\definecolor{cUnif}{HTML}{0B6E4F}
+\definecolor{cBox}{HTML}{FFF3C4}
+\definecolor{cOrange}{HTML}{E8A33D}
+\definecolor{cBlue}{HTML}{7FB3D5}
+\definecolor{cRed}{HTML}{E05C4A}
+\definecolor{cGrey}{HTML}{6C757D}
 
 \title{\bfseries\LARGE The Weight of the Adjoint\\[6pt]
-\large Exact Symplectic Neural Operators on Non-Periodic Grids,\\
-and a Controlled Refutation of Structure Preservation}
+\large Which Symplectic Form a Neural Operator Preserves,\\
+and Whether It Survives the Lift}
 
 \author{
   \textbf{Sourav Sahu} \\ Microsoft \\ \texttt{sahusourav@microsoft.com}
@@ -48,34 +59,30 @@ and a Controlled Refutation of Structure Preservation}
 \maketitle
 
 \begin{abstract}
-Structure-preserving neural operators are motivated by a premise that is almost
-never tested directly: that endowing a learned solution operator with the
-geometry of the underlying flow---symplecticity, in the Hamiltonian
-case---improves accuracy or long-horizon stability. Testing it requires two
-things the literature lacks: an operator whose structure is \emph{exact} rather
-than nominal, and an instrument that \emph{measures} structure rather than
-asserting it. We supply both. First, we show that on a non-uniform
-Chebyshev--Gauss--Lobatto grid the discrete $L^2$ adjoint is
-$K^{*}=W^{-1}K^{\top}W$, not $K^{\top}$, where $W$ collects the quadrature
-weights; using the correct weighted adjoint, the gradient shear
-$\Phi(q,p)=(q,\,p+K^{*}\rho(Kq))$ is \emph{exactly} symplectic for every
-parameter value. On a uniform or periodic grid $W\propto I$ and the distinction
-is invisible---which is why Fourier-parameterised symplectic operators never
-encounter it. Second, we compute the symplectic defect
-$\lVert WA-A^{\top}W\rVert_F/\lVert WA\rVert_F$ from the autograd Jacobian. The
-instrument is decisive: our construction measures $2\times10^{-16}$ (machine
-precision, resolution-independently), an otherwise identical twin using the
-plain transpose measures $0.65$--$0.78$, and a widely-described
-``pseudo-symplectic'' kernel operator measures $1.37$---that is, not symplectic
-at all. Pairing the first two as trained models gives a clean experiment:
-across $31$ configurations, $9$ PDEs and $3$ seeds at matched capacity, the
-\emph{non}-symplectic twin is more accurate on \emph{all six} one-dimensional
-problems (by $1.1\times$ to $4.3\times$), and neither variant gains rollout
-stability. What does predict performance is matching the \emph{basis} to the
-boundary conditions: on a Hamiltonian, non-periodic benchmark every Chebyshev
-operator beats every Fourier operator by $3.0$--$4.9\times$, while Fourier
-operators win four of five periodic problems. We conclude that the geometry of
-the discretisation, not the geometry of the flow, is what earns its keep.
+Structure-preserving neural operators are built on a question that is usually
+left unasked: symplectic \emph{with respect to which inner product}? On a
+non-uniform grid the discrete $L^2$ adjoint is $K^{*}=W^{-1}K^{\top}W$, where
+$W$ collects the quadrature weights, and the choice of $W$ silently selects
+which symplectic form a gradient shear preserves. We make that choice explicit,
+build both alternatives, and measure them. Using the symplectic defect
+$\lVert WA-A^{\top}W\rVert_F/\lVert WA\rVert_F$ computed from the autograd
+Jacobian, we find a clean diagonal across $1$-D, $2$-D and $3$-D: each
+construction is exact ($2\times10^{-16}$) in the form its adjoint was built from
+and $O(1)$ away from the other. Preserving \emph{a} symplectic form is therefore
+cheap; the content lies entirely in preserving the \emph{right} one. Because our
+benchmarks are discretised on uniform grids, this yields a controlled test, and
+the matched-form operator wins $16$ of $18$ paired comparisons. When we remove
+the lift and projection layers so that the \emph{deployed map}---not merely its
+interior blocks---is symplectic, the margin widens to $14$--$22\times$. The same
+construction then produces the study's strongest result: over a $2\times10^{4}$
+step rollout every operator we tested diverges to relative errors of
+$10^{5}$--$10^{12}$, \emph{except} the lift-free symplectic ones, which stay
+bounded near $1$ with energy drift of order unity. Structure preservation is not
+a cost, as a prior version of this study concluded; it is a benefit that is
+forfeited by the conventional lift--process--project wrapper and invisible
+unless the inner product is named. We also report a $783$-run, nine-equation,
+three-seed benchmark, and retract an earlier symplecticity theorem of our own
+that conflated unit Jacobian determinant with preservation of $\omega$.
 \end{abstract}
 
 % ============================================================================
@@ -84,543 +91,680 @@ the discretisation, not the geometry of the flow, is what earns its keep.
 
 Neural operators learn maps between function spaces and have become standard
 surrogates for parametric PDEs \citep{kovachki2023neural,li2021fno,lu2021deeponet}.
-A prominent and fast-growing branch argues that such operators should additionally
-respect the \emph{geometric structure} of the dynamics they emulate: symplecticity
-for Hamiltonian systems, or the metriplectic split for systems with dissipation.
-The argument is appealing and has a strong pedigree in finite dimensions
-\citep{greydanus2019hnn,jin2020sympnets,cranmer2020lnn,zhong2020symoden}, and
-2026 saw it carried into function space by several independent groups
+A fast-growing branch argues that such operators should respect the
+\emph{geometric structure} of the dynamics they emulate---symplecticity for
+Hamiltonian systems, or the metriplectic split when dissipation is present. The
+argument has a strong pedigree in finite dimensions
+\citep{greydanus2019hnn,jin2020sympnets,cranmer2020lnn,zhong2020symoden}, and in
+2026 several groups carried it into function space
 \citep{makara2026sno,sulskis2026generic,zhang2026legonet,varghese2026pisonet}.
 
-The premise underlying all of this work is rarely isolated. Papers typically
-compare a structured operator against an \emph{unstructured} baseline that differs
-in many ways at once---parameterisation, capacity, training recipe---and report
-that the structured model is better. Such a comparison cannot separate the
-contribution of the geometric prior from everything else that changed. Worse,
-whether a model is actually structure-preserving is usually argued on paper and
-never measured on the trained network.
+Two things are almost never done. First, whether a trained network is actually
+structure-preserving is argued on paper rather than measured. Second---and this
+is our starting point---the claim is stated without naming the inner product it
+is relative to. On a uniform grid that omission is harmless, because the
+quadrature weight is a single scalar. On a non-uniform grid it is not: the
+weights vary by a factor of order $N$ (Figure~\ref{fig:weights}), the adjoint is
+$K^{*}=W^{-1}K^{\top}W$ rather than $K^{\top}$, and two implementations that
+differ only in which $W$ they assume preserve two \emph{different} symplectic
+forms.
 
-This paper isolates the premise. Our contributions are:
+This gives an unusually clean experiment. Build both, verify that each is exact
+in its own form, then ask which one helps. Our contributions:
 
 \begin{enumerate}\itemsep2pt
-\item \textbf{A correction and a construction (\S\ref{sec:method}).} We identify
-an error that is easy to make and hard to see: on a non-uniform grid, the $L^2$
-adjoint is not the matrix transpose. We give the correct weighted adjoint and
-prove that the resulting gradient shear is exactly symplectic on a
-Chebyshev--Gauss--Lobatto grid for \emph{any} kernel and \emph{any} pointwise
-nonlinearity (Theorem~\ref{thm:sacheb}). This yields \sacheb{}, to our knowledge
-the first exactly symplectic neural operator on a non-periodic domain.
+\item \textbf{An instrument} (\S\ref{sec:defect}). We measure the symplectic
+defect directly from the autograd Jacobian, against \emph{both} candidate inner
+products, scaling to $3$-D with Hutchinson probes. It first falsified a
+symplecticity claim in our own earlier work (Appendix~\ref{app:retraction}).
 
-\item \textbf{An instrument (\S\ref{sec:defect}).} We measure the symplectic
-defect directly from the autograd Jacobian. It certifies \sacheb{} at
-$2\times10^{-16}$, shows the weighted adjoint is \emph{necessary} (plain
-transpose: $0.65$--$0.78$), and refutes the ``pseudo-symplectic'' label attached
-to a Chebyshev kernel-integral operator we also study
-($1.37$; \S\ref{sec:defect-results}).
+\item \textbf{A construction} (\S\ref{sec:arch}). \sacheb{}: exact symplecticity
+on a non-periodic Chebyshev grid in $1$-D, $2$-D and $3$-D, for any kernel and
+any pointwise nonlinearity (Theorem~\ref{thm:sacheb}). We describe it and the
+\ckino{} operator it grew out of component by component.
 
-\item \textbf{A controlled refutation (\S\ref{sec:ablation}).} Because
-\sacheb{} and its wrong-adjoint twin \naive{} differ \emph{only} in whether they
-are symplectic, we can test the premise directly. The non-symplectic twin is
-more accurate on all six 1-D problems, and the advertised long-horizon benefit
-does not materialise either.
+\item \textbf{The form result} (\S\ref{sec:form}). Each variant is exact in its
+own form and $O(1)$ in the other. The variant whose form matches the grid wins
+$16/18$ paired comparisons; with the lift removed, $4/4$ by $14$--$22\times$.
 
-\item \textbf{A positive result (\S\ref{sec:basis}).} Basis--boundary matching
-predicts the winner. We introduce a Hamiltonian \emph{non-periodic} benchmark on
-which Chebyshev operators beat every Fourier operator by $3.0$--$4.9\times$,
-while the ordering reverses on periodic problems.
+\item \textbf{The lift result} (\S\ref{sec:long}). Only operators that are
+symplectic \emph{end to end} survive a $2\times10^{4}$-step rollout. A symplectic
+core wrapped in pointwise lift, projection and a residual update does not.
 
-\item \textbf{A benchmark (\S\ref{sec:setup}).} $31$ configurations $\times$ $9$
-PDEs $\times$ $3$ seeds at genuinely matched capacity ($\approx$25k parameters),
-with prediction mode and training noise \emph{controlled} rather than confounded,
-and with physical verdicts rather than RMS alone.
+\item \textbf{A benchmark} (\S\ref{sec:setup}): $783$ runs over nine equations in
+$1$-D/$2$-D/$3$-D at matched capacity, three seeds, plus an
+unconstrained-capacity sweep showing the ranking is budget-dependent.
 \end{enumerate}
 
-We stress what we are \emph{not} claiming. We do not claim structure preservation
-is useless in general; we claim that in this protocol, on these problems, at
-matched capacity, it does not pay---and that the burden of measurement, not
-assertion, should fall on the claim.
+\paragraph{A correction.} An earlier version of this study reported that exact
+symplecticity was a measurable \emph{cost}. That conclusion was an artefact of
+scoring both variants against a single inner product. We state the error plainly
+here because it is the kind the instrument exists to catch.
 
 % ============================================================================
 \section{Related work}
 % ============================================================================
 
 \paragraph{Neural operators.} The Fourier Neural Operator parameterises the
-integral kernel by a truncated set of Fourier multipliers \citep{li2021fno},
-inheriting discretisation invariance and $O(N\log N)$ cost; DeepONet factorises
-the operator into branch and trunk networks \citep{lu2021deeponet}; the general
-framework and universality results are given by \citet{kovachki2023neural}.
-Tensorised \citep{kossaifi2023mgtfno} and U-Net-augmented \citep{wen2022ufno}
-variants improve parameter efficiency and accuracy. A recent practitioner-oriented
-account of FNO's assumptions and failure modes is given by
-\citet{duruisseaux2026fnoexplained}, and reference implementations by
-\citet{kossaifi2024library}. Physics-informed variants add PDE residual terms to
-the loss \citep{raissi2019pinn,li2023pino}; these are \emph{soft} constraints and
-give no algebraic guarantee.
+integral kernel by truncated Fourier multipliers \citep{li2021fno}, inheriting
+discretisation invariance and $O(N\log N)$ cost; DeepONet factorises the operator
+into branch and trunk networks \citep{lu2021deeponet}; the general framework and
+universality results are due to \citet{kovachki2023neural}. Tensorised
+\citep{kossaifi2023mgtfno} and U-Net-augmented \citep{wen2022ufno} variants
+improve parameter efficiency. A practitioner-oriented account of FNO's
+assumptions is given by \citet{duruisseaux2026fnoexplained}, with reference
+implementations in \citet{kossaifi2024library}. Physics-informed variants add PDE
+residuals to the loss \citep{raissi2019pinn,li2023pino}; these are \emph{soft}
+constraints with no algebraic guarantee.
 
-\paragraph{Structure preservation in finite dimensions.} Hamiltonian Neural
-Networks \citep{greydanus2019hnn} and Lagrangian Neural Networks
-\citep{cranmer2020lnn} learn the generating function; SympNets
-\citep{jin2020sympnets} and Symplectic ODE-Net \citep{zhong2020symoden}
-parameterise symplectic maps directly. These act on $\R^{2d}$ and depend on a
-fixed discretisation, so they are not operators in the function-space sense.
+\paragraph{Structure preservation in finite dimensions.} Hamiltonian
+\citep{greydanus2019hnn} and Lagrangian \citep{cranmer2020lnn} neural networks
+learn the generating function; SympNets \citep{jin2020sympnets} and Symplectic
+ODE-Net \citep{zhong2020symoden} parameterise symplectic maps directly. These act
+on $\R^{2d}$ at a fixed discretisation and are not operators in the
+function-space sense.
 
 \paragraph{Structure-preserving neural operators.} \citet{makara2026sno}
 introduce the Symplectic Neural Operator (SNO), composing symplectic shear blocks
 whose update fields are gradients of learned energy functionals, realised with
-self-adjoint Fourier layers on the torus; they prove a modified-Hamiltonian
-stability result. \citet{sulskis2026generic} embed the full GENERIC
-\citep{grmela1997generic,ottinger2005beyond} degeneracy structure into an FNO
-using projected Fourier multipliers, extending finite-dimensional bracket
-learning \citep{zhang2022gfinns}. \citet{zhang2026legonet} compose
-structure-preserving blocks on boundary-adapted spectral representations, and
-\citet{varghese2026pisonet} apply a conditional symplectic operator to optimal
-control. Our work is complementary and adversarial: we take the strongest form of
-the symplectic premise, realise it exactly on a domain the Fourier constructions
-cannot address, and then measure whether it pays.
+self-adjoint Fourier layers on the torus. \citet{sulskis2026generic} embed the
+GENERIC degeneracy structure \citep{grmela1997generic,ottinger2005beyond} into an
+FNO, extending finite-dimensional bracket learning \citep{zhang2022gfinns}.
+\citet{zhang2026legonet} compose structure-preserving blocks on boundary-adapted
+spectral representations, and \citet{varghese2026pisonet} apply a conditional
+symplectic operator to optimal control.
 
-\paragraph{Positioning.} \citet{makara2026sno} state explicitly that their
-formulation applies to \emph{strong canonical symplectic Hilbert phase spaces},
-and that extensions beyond that setting require further geometric machinery. The
-non-periodic case is precisely where the adjoint subtlety of
-\S\ref{sec:method} appears, and is the setting of our benchmark
-\S\ref{sec:basis}. Auxiliary ingredients we use---Lie-equivariant lifting
+\paragraph{Where we differ.} All of these are built on the torus or on a uniform
+grid, where $W\propto I$ and the adjoint question does not arise---the correct
+adjoint is obtained \emph{by accident}. \citet{makara2026sno} state explicitly
+that their formulation covers strong canonical symplectic Hilbert spaces and that
+extensions require further machinery. We work in the setting where the choice is
+forced, show that it is consequential, and measure rather than assert the
+outcome. Auxiliary ingredients we use---Lie-equivariant lifting
 \citep{finzi2020lieconv} and FiLM conditioning \citep{perez2018film}---are
 standard and not claimed as contributions.
 
 % ============================================================================
-\section{Background: discrete symplectic structure on a non-uniform grid}
+\section{Background: symplectic structure on a non-uniform grid}
 \label{sec:background}
 % ============================================================================
 
 Let $\Omega=[-1,1]$ be discretised on the $N+1$ Chebyshev--Gauss--Lobatto (CGL)
-nodes $x_j=\cos(j\pi/N)$. Functions are represented by their nodal values, and
-the physical $L^2$ inner product is approximated by Clenshaw--Curtis quadrature
+nodes $x_j=\cos(j\pi/N)$. Functions are represented by nodal values, and the
+physical $L^2$ product is approximated by Clenshaw--Curtis quadrature
 \citep{trefethen2000spectral},
 \begin{equation}
 \iprod{f}{g}_W \;=\; \int_\Omega f g\,dx \;\approx\; f^{\top} W g,
 \qquad W=\mathrm{diag}(w_0,\dots,w_N),\quad w_j>0 .
 \label{eq:ip}
 \end{equation}
-The weights $w_j$ are \emph{not} constant: they vary by a factor of order $N$
-between the boundary and the interior of the grid. This single fact drives
-everything that follows.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/weights.png}
+\caption{The geometric fact the paper rests on. \textbf{(a)} CGL nodes cluster
+quadratically at the boundary; a uniform grid does not. \textbf{(b)} The
+Clenshaw--Curtis weights therefore vary by $78\times$ across the domain at
+$N=24$, so $W\neq cI$ and consequently $K^{*}\neq K^{\top}$. On a uniform grid
+the two coincide, which is why a Fourier-parameterised operator never encounters
+the distinction. \textbf{(c)} The Chebyshev basis assumes no periodicity at the
+domain ends.}
+\label{fig:weights}
+\end{figure}
 
 Phase space is $\mathbb{P}=\mathcal{H}_q\oplus\mathcal{H}_p$ with
-$\mathcal{H}=(\R^{N+1},\iprod{\cdot}{\cdot}_W)$, carrying the canonical form
+$\mathcal{H}=(\R^{N+1},\iprod{\cdot}{\cdot}_W)$, carrying
 \begin{equation}
 \omega_W(z,z') = \iprod{q}{p'}_W - \iprod{p}{q'}_W = z^{\top}\Omega z',
 \qquad
 \Omega=\begin{pmatrix} 0 & W \\ -W & 0\end{pmatrix}.
 \label{eq:omega}
 \end{equation}
+This is the finite-dimensional shadow of the weak symplectic form on a Hilbert
+phase space \citep{weinstein1969symplectic,marsden1999mechanics}; the point of
+what follows is that the discretisation chooses $W$, and that choice is not
+innocuous.
 
 \begin{definition}[Weighted adjoint]
-For a linear operator $K$, the adjoint with respect to \eqref{eq:ip} is the
-unique $K^{*}$ with $\iprod{Kf}{g}_W=\iprod{f}{K^{*}g}_W$ for all $f,g$.
-Expanding, $f^{\top}K^{\top}Wg=f^{\top}WK^{*}g$ for all $f,g$, hence
+The adjoint of $K$ with respect to \eqref{eq:ip} is the unique $K^{*}$ with
+$\iprod{Kf}{g}_W=\iprod{f}{K^{*}g}_W$ for all $f,g$. Expanding,
+$f^{\top}K^{\top}Wg=f^{\top}WK^{*}g$, hence
 \begin{equation}
 \boxed{\;K^{*}=W^{-1}K^{\top}W\;}
 \label{eq:adjoint}
 \end{equation}
 \end{definition}
 
-\begin{remark}[Why this is invisible in a Fourier operator]
-\label{rem:invisible}
-On a uniform or periodic grid the quadrature weight is a single scalar,
-$W=cI$, so \eqref{eq:adjoint} collapses to $K^{*}=K^{\top}$ and the weighted
-adjoint coincides with the matrix transpose. Every construction built on the
-torus therefore gets the adjoint right \emph{by accident}. On CGL nodes it does
-not, and substituting $K^{\top}$ for $K^{*}$ silently destroys the geometry one
-is trying to impose. This is the eponymous ``weight of the adjoint''.
-\end{remark}
-
-The following elementary proposition is the criterion we will use throughout,
-and it is also where a common error enters.
-
 \begin{proposition}[Shear criterion]
 \label{prop:shear}
 Let $\Phi(q,p)=(q,\,p+F(q))$ with $A=DF(q)$. Then
 \begin{equation}
 (D\Phi)^{\top}\Omega\,(D\Phi)-\Omega
-=\begin{pmatrix} WA-A^{\top}W & 0\\ 0 & 0\end{pmatrix},
+=\begin{pmatrix} WA - A^{\top}W & 0\\ 0 & 0\end{pmatrix},
 \label{eq:defect-identity}
 \end{equation}
-so $\Phi$ preserves $\omega_W$ \emph{if and only if} $A$ is self-adjoint in $W$,
-i.e.\ $WA=A^{\top}W$. The analogous statement holds for the transposed shear
-$(q,p)\mapsto(q+G(p),p)$.
+so $\Phi$ preserves $\omega_W$ \emph{iff} $A$ is self-adjoint in $W$, i.e.\
+$WA=A^{\top}W$. The transposed shear behaves analogously.
 \end{proposition}
 
 \begin{proof}
-$D\Phi=\begin{psmallmatrix} I&0\\ A&I\end{psmallmatrix}$. Then
+$D\Phi=\begin{psmallmatrix} I&0\\ A&I\end{psmallmatrix}$, so
 $\Omega D\Phi=\begin{psmallmatrix} WA& W\\ -W&0\end{psmallmatrix}$ and
 $(D\Phi)^{\top}\Omega D\Phi
 =\begin{psmallmatrix} I&A^{\top}\\ 0&I\end{psmallmatrix}
  \begin{psmallmatrix} WA& W\\ -W&0\end{psmallmatrix}
 =\begin{psmallmatrix} WA-A^{\top}W& W\\ -W&0\end{psmallmatrix}$.
-Subtracting $\Omega$ gives \eqref{eq:defect-identity}.
+Subtract $\Omega$.
 \end{proof}
 
 \begin{remark}[Volume preservation is not symplecticity]
 \label{rem:volume}
-$\det D\Phi=1$ for \emph{every} shear, regardless of $A$. Unit Jacobian
-determinant is Liouville volume preservation, which is strictly weaker than
-preservation of $\omega_W$: by Proposition~\ref{prop:shear} the latter requires
-the additional algebraic condition $WA=A^{\top}W$. Conflating the two is, in our
-experience, the single most common way a ``symplectic'' architecture turns out
-not to be one; we exhibit a concrete instance in \S\ref{sec:defect-results}.
+$\det D\Phi=1$ for \emph{every} shear, whatever $A$. Unit Jacobian determinant is
+Liouville volume preservation, strictly weaker than preservation of $\omega_W$,
+which by Proposition~\ref{prop:shear} additionally requires $WA=A^{\top}W$.
+Conflating the two is, in our experience, the most common way an architecture
+described as symplectic turns out not to be; we exhibit an instance of our own in
+\S\ref{sec:form} and Appendix~\ref{app:retraction}.
+\end{remark}
+
+\begin{remark}[The question is under-specified]
+\label{rem:illposed}
+Because \eqref{eq:defect-identity} depends on $W$, ``is this block symplectic?''
+has no answer until $W$ is named. Two implementations differing only in the $W$
+used inside the adjoint are \emph{both} exactly symplectic---in different forms.
+This is the observation the rest of the paper develops.
 \end{remark}
 
 % ============================================================================
-\section{Method: exactly symplectic shears on a Chebyshev grid}
-\label{sec:method}
+\section{Architectures}
+\label{sec:arch}
 % ============================================================================
 
-\subsection{The construction}
+We describe two operators. \ckino{} is a Chebyshev kernel-integral operator that
+motivated this study and serves as our non-periodic baseline; \sacheb{} is the
+self-adjoint construction that makes the symplectic form explicit and
+controllable.
 
-Let $K$ be any bounded linear operator (in our implementation, a low-rank
-Chebyshev kernel; see \S\ref{sec:impl}), let $R\in C^1(\R)$ with $\rho=R'$, and
-define the energy functional and its $W$-gradient
+\subsection{\ckino{}: a Chebyshev kernel-integral operator}
+\label{sec:ckino}
+
+\ckino{} replaces FNO's Fourier multipliers with a low-rank kernel expanded in
+\emph{Chebyshev coefficients}, so that no periodicity is assumed and the operator
+can be evaluated on any CGL grid. Figure~\ref{fig:ckino} shows the pipeline; the
+components are as follows.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  node distance=6mm,
+  box/.style={draw,rounded corners=2pt,minimum height=8mm,inner xsep=4pt,align=center},
+  circ/.style={draw,circle,minimum size=8mm,inner sep=1pt},
+  ar/.style={-{Stealth[length=2mm]},thick}
+]
+\node[circ,fill=cBlue] (in) {$v(x)$};
+\node[box,fill=cOrange!55,right=7mm of in,text width=17mm] (lift)
+     {Lie\\lifting};
+% --- kernel integral group ---
+\node[box,fill=cOrange!70,right=8mm of lift,text width=15mm] (coef)
+     {Cheb.\\coeffs $\hat\varphi,\hat\psi$};
+\node[box,fill=cOrange!70,right=5mm of coef,text width=15mm] (eval)
+     {evaluate\\on CGL $N$};
+\node[box,fill=cOrange!70,right=5mm of eval,text width=24mm] (contract)
+     {$\sum_r\varphi_r\,M_r\iprod{\psi_r}{\cdot}_W$};
+\begin{scope}[on background layer]
+  \node[fill=cBox,rounded corners=3pt,fit=(coef)(eval)(contract),inner sep=4pt] (kbox) {};
+\end{scope}
+\node[above=1mm of kbox,font=\footnotesize\itshape] {separable Chebyshev kernel integral $K$};
+% --- symplectic-style block ---
+\node[box,fill=cRed!55,below=13mm of contract,text width=34mm] (blk)
+     {$(q,p)$ split $+$ St\"ormer--Verlet-style\\ half-step updates $\times$ depth};
+\node[box,fill=cOrange!55,left=10mm of blk,text width=16mm] (proj) {pointwise\\projection};
+\node[circ,fill=cBlue,left=8mm of proj] (out) {$u(x)$};
+
+\draw[ar] (in) -- (lift);
+\draw[ar] (lift) -- (coef);
+\draw[ar] (coef) -- (eval);
+\draw[ar] (eval) -- (contract);
+\draw[ar] (contract) -- (blk);
+\draw[ar] (blk) -- (proj);
+\draw[ar] (proj) -- (out);
+\coordinate (rb) at ($(blk.south)+(0,-7mm)$);
+\draw[ar,cGrey,dashed] (lift.south) |- (rb)
+      node[pos=0.68,below,font=\scriptsize,text=cGrey] {residual skip}
+      -- (blk.south);
+\end{tikzpicture}
+\caption{\ckino{}. The kernel is stored as Chebyshev \emph{coefficients} and
+evaluated on whatever CGL grid is requested, so the parameters are independent of
+resolution. The $(q,p)$ block mimics a St\"ormer--Verlet half-step. Its Jacobian
+is triangular with unit diagonal, hence volume-preserving---but, as
+\S\ref{sec:form} shows by measurement, \emph{not} symplectic in either candidate
+form.}
+\label{fig:ckino}
+\end{figure}
+
+\paragraph{(i) Lie-equivariant lifting.} A pointwise or short-stencil map raising
+the $C$ physical fields to $H$ hidden channels, built from generators of a small
+Lie group so that the lift commutes with translations of the input
+\citep{finzi2020lieconv}. Two variants matter later: a \emph{convolutional} lift
+(resolution-dependent stencil) and a \emph{spectral} lift (FFT-derivative, exactly
+resolution-invariant). \S\ref{sec:support} shows these trade invariance against
+accuracy.
+
+\paragraph{(ii) Separable Chebyshev kernel integral.} The operator core,
+\begin{equation}
+(Kv)(x)=\sum_{r=1}^{R}\Big(\textstyle\prod_{a=1}^{d}\varphi^a_r(x_a)\Big)\,
+        \sigma_r M_r \iprod{\textstyle\prod_a\psi^a_r}{v}_W ,
+\label{eq:ckino-kernel}
+\end{equation}
+with $\varphi^a_r,\psi^a_r$ stored as $n_{\mathrm{train}}{+}1$ Chebyshev
+coefficients per axis, $M_r\in\R^{H\times H}$ mixing channels and $\sigma_r>0$ a
+learned Mercer scale. Cost is $O(RN^d)$ rather than $O(N^{2d})$, and because the
+basis functions are polynomials the same weights evaluate on any grid.
+
+\paragraph{(iii) St\"ormer--Verlet-style block.} Hidden channels are split into
+$(q,p)$ halves and updated by alternating half-steps with a learned step size.
+This is where the original symplecticity claim was made, and where it fails:
+\eqref{eq:ckino-kernel} uses \emph{independent} $\varphi_r$ and $\psi_r$ and an
+unconstrained $M_r$, so nothing forces $k(x,y)=k(y,x)^{\top}$ and the Jacobian is
+not self-adjoint in any of the forms we consider.
+
+\paragraph{(iv) Projection.} A pointwise map back to $C$ output channels.
+
+\subsection{\sacheb{}: making the form explicit}
+\label{sec:sacheb}
+
+\sacheb{} repairs (iii) by construction. Let $K$ be any bounded operator, $R\in
+C^1(\R)$ with $\rho=R'$, and define the energy functional and its $W$-gradient
 \begin{equation}
 \mathcal{E}(q)=\int_\Omega R\big((Kq)(x)\big)\,dx,
 \qquad
-F(q) \;:=\; \nabla_W\mathcal{E}(q) \;=\; K^{*}\rho(Kq),
+F(q) \;=\; \nabla_W\mathcal{E}(q) \;=\; K^{*}\rho(Kq),
 \label{eq:field}
 \end{equation}
-with $K^{*}$ the weighted adjoint \eqref{eq:adjoint}. The \sacheb{} block
-alternates the two shears
+with $K^{*}$ the weighted adjoint \eqref{eq:adjoint}. The block alternates
 \begin{equation}
 \Phi^{\uparrow}(q,p)=(q,\;p+F_\theta(q)),
 \qquad
-\Phi^{\downarrow}(q,p)=(q+G_\vartheta(p),\;p),
+\Phi^{\downarrow}(q,p)=(q+G_\vartheta(p),\;p).
 \label{eq:block}
 \end{equation}
-each of the form \eqref{eq:field} with its own parameters.
 
-\begin{theorem}[Exact symplecticity on a non-periodic grid]
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={draw,rounded corners=2pt,minimum height=8mm,inner xsep=5pt,align=center},
+  circ/.style={draw,circle,minimum size=7mm,inner sep=1pt},
+  ar/.style={-{Stealth[length=2mm]},thick}
+]
+\node[circ,fill=cBlue] (q) {$q$};
+\node[box,fill=cOrange!70,right=7mm of q] (K) {$K$};
+\node[box,fill=cRed!55,right=6mm of K] (rho) {$\rho=R'$\\[-1pt]\scriptsize pointwise};
+\node[box,fill=cOrange!70,right=6mm of rho] (Ks) {$K^{*}=W^{-1}K^{\top}W$};
+\node[circ,fill=cRed!70,right=7mm of Ks] (plus) {$+$};
+\node[circ,fill=cBlue,right=7mm of plus] (pout) {$p'$};
+\node[circ,fill=cBlue,above=8mm of plus] (p) {$p$};
+\draw[ar] (q) -- (K);  \draw[ar] (K) -- (rho);  \draw[ar] (rho) -- (Ks);
+\draw[ar] (Ks) -- (plus); \draw[ar] (p) -- (plus); \draw[ar] (plus) -- (pout);
+\begin{scope}[on background layer]
+  \node[fill=cBox,rounded corners=3pt,fit=(K)(rho)(Ks),inner sep=5pt] (g) {};
+\end{scope}
+\node[below=1mm of g,font=\footnotesize\itshape,text width=72mm,align=center]
+  {$F=K^{*}\rho(Kq)$ \; so \; $DF=K^{*}\,\mathrm{diag}(\rho')\,K$;\\[1pt]
+   $W$ and $\mathrm{diag}(\rho')$ are both diagonal, hence commute,
+   so $W\,DF=(DF)^{\top}W$ \emph{exactly}};
+\node[right=3mm of pout,font=\footnotesize,text width=30mm,align=left]
+  {$q'=q$\\[1pt] shear is symplectic in $\omega_W$};
+\end{tikzpicture}
+\caption{The \sacheb{} gradient shear. The only design choice is which $W$ enters
+$K^{*}$: the Clenshaw--Curtis weights ($\Wc$) or constant weights ($\Wu$). Both
+give an \emph{exactly} symplectic block---in different forms. That choice, not
+the presence of symplecticity, is what the experiments vary.}
+\label{fig:sacheb}
+\end{figure}
+
+\begin{theorem}[Exact symplecticity, any dimension]
 \label{thm:sacheb}
-For any parameters of $K$, any $R\in C^1$, and any resolution $N$, the map
-$\Phi^{\uparrow}$ in \eqref{eq:block} satisfies
-$(\Phi^{\uparrow})^{*}\omega_W=\omega_W$ exactly. The same holds for
-$\Phi^{\downarrow}$, and hence for any finite alternating composition
-$\Phi^{\uparrow}_{\theta_L}\circ\Phi^{\downarrow}_{\vartheta_L}\circ\cdots\circ
-\Phi^{\uparrow}_{\theta_1}\circ\Phi^{\downarrow}_{\vartheta_1}$.
+For any parameters of $K$, any $R\in C^1$, any resolution $N$ and any spatial
+dimension $d\in\{1,2,3\}$, the map $\Phi^{\uparrow}$ of \eqref{eq:block}
+satisfies $(\Phi^{\uparrow})^{*}\omega_W=\omega_W$ exactly, and likewise
+$\Phi^{\downarrow}$; hence so does any finite alternating composition.
 \end{theorem}
 
 \begin{proof}
-Write $D=\mathrm{diag}\big(\rho'((Kq)_j)\big)$. Differentiating
-\eqref{eq:field}, $A=DF=K^{*}DK$. Using \eqref{eq:adjoint},
+Write $D=\mathrm{diag}\big(\rho'((Kq)_j)\big)$, so $A=DF=K^{*}DK$. Using
+\eqref{eq:adjoint},
 \[
-WA \;=\; W\,(W^{-1}K^{\top}W)\,D\,K \;=\; K^{\top}WDK,
+WA = W(W^{-1}K^{\top}W)DK = K^{\top}WDK,
+\qquad
+A^{\top}W = K^{\top}D(K^{*})^{\top}W = K^{\top}D\,W\!KW^{-1}W = K^{\top}DWK .
 \]
-\[
-A^{\top}W \;=\; K^{\top}D^{\top}(K^{*})^{\top}W
-\;=\; K^{\top}D\,(W^{-1}K^{\top}W)^{\top}W
-\;=\; K^{\top}D\,W K W^{-1} W
-\;=\; K^{\top}DWK .
-\]
-Both $W$ and $D$ are diagonal, hence commute: $WD=DW$. Therefore
-$WA=K^{\top}WDK=K^{\top}DWK=A^{\top}W$, and
-Proposition~\ref{prop:shear} gives
-$(D\Phi^{\uparrow})^{\top}\Omega D\Phi^{\uparrow}=\Omega$. Compositions of
-symplectic maps are symplectic.
+$W$ and $D$ are diagonal and therefore commute, so $WA=A^{\top}W$; apply
+Proposition~\ref{prop:shear}. In $d$ dimensions the weight is the outer product
+$W=\bigotimes_a W_a$, still diagonal, so the argument is unchanged.
 \end{proof}
 
-Three features of Theorem~\ref{thm:sacheb} are worth emphasising. It is
-\emph{unconditional} in the parameters---the guarantee survives any optimiser and
-any amount of training, and is not an approximation that degrades with step size.
-It is \emph{resolution-independent}: $W$ and the basis are recomputed at whatever
-grid the operator is evaluated on, so the same trained weights are exactly
-symplectic at every $N$. And it is \emph{non-periodic}: the construction lives on
-CGL nodes and imposes no periodicity, which is exactly the regime the Fourier
-constructions of \citet{makara2026sno} exclude.
+\paragraph{Low-rank realisation.} With
+$Kv=\sum_r\varphi_r M_r\iprod{\psi_r}{v}_W$ the weighted adjoint is
+$K^{*}g=\sum_r\psi_r M_r^{\top}\iprod{\varphi_r}{g}_W$ (Appendix~\ref{app:lowrank}):
+\emph{swap $\varphi\leftrightarrow\psi$ and transpose $M$}. No inverse of $W$ is
+ever formed and the cost stays $O(RN^d)$.
 
-\begin{proposition}[Necessity of the weighted adjoint]
-\label{prop:necessity}
-Replace $K^{*}$ in \eqref{eq:field} by the plain transpose $K^{\top}$, giving
-$\tilde F(q)=K^{\top}\rho(Kq)$ and $\tilde A=K^{\top}DK$. Then
-$W\tilde A-\tilde A^{\top}W = W K^{\top}DK - K^{\top}DKW$, which vanishes for all
-$K,D$ only if $W$ commutes with $K^{\top}DK$ for all such products---in
-particular it holds identically when $W\propto I$, and fails in general
-otherwise. Hence on a uniform grid the two constructions coincide, while on CGL
-nodes the transpose variant is not symplectic.
-\end{proposition}
+\subsection{Lifted versus lift-free, and why it matters}
+\label{sec:lift}
 
-Proposition~\ref{prop:necessity} is what makes the experiment of
-\S\ref{sec:ablation} possible: it furnishes an architecture that is identical to
-\sacheb{} in every respect except that it lacks the property under test. We call
-it \naive{}.
+Theorem~\ref{thm:sacheb} is a statement about the \emph{block}. A deployed
+operator usually wraps blocks in a pointwise lift and projection and is driven
+residually, $x_{t+1}=x_t+\mathcal{N}(x_t)$. None of those three maps is
+symplectic, so the composition is not either
+(Figure~\ref{fig:lift}). We therefore build both:
 
-\subsection{Implementation}
-\label{sec:impl}
+\begin{itemize}\itemsep2pt
+\item \textbf{Lifted} (\texttt{sacheb}, \texttt{sacheb\_naive}): $H\gg C$ hidden
+channels, maximal capacity, symplectic \emph{core} only.
+\item \textbf{Lift-free} (\texttt{sacheb\_pure}, \texttt{sacheb\_pure\_naive}):
+the shears act directly on the PDE's own $(q,p)$ fields, $H=C$, no lift, no
+projection, non-residual update. The \emph{deployed map} is exactly symplectic;
+capacity must come from rank and depth instead. This requires a canonical
+$(q,p)$ pair and so applies only to two-field problems.
+\end{itemize}
 
-We take $K$ to be a rank-$R$ separable Chebyshev kernel,
-\begin{equation}
-(Kv)(x)=\sum_{r=1}^{R}\varphi_r(x)\,M_r\,\iprod{\psi_r}{v}_W ,
-\qquad
-(K^{*}g)(x)=\sum_{r=1}^{R}\psi_r(x)\,M_r^{\top}\,\iprod{\varphi_r}{g}_W ,
-\label{eq:lowrank}
-\end{equation}
-where $M_r$ mixes channels. The second identity is the weighted adjoint of the
-first---verified by expanding both sides of $\iprod{Kv}{g}_W=\iprod{v}{K^{*}g}_W$
----so in the low-rank form the adjoint is obtained simply by \emph{swapping
-$\varphi\leftrightarrow\psi$ and transposing $M$}, and no matrix inverse is ever
-formed. The basis functions $\varphi_r,\psi_r$ are stored as \emph{Chebyshev
-coefficients} and evaluated on whatever CGL grid is requested, which is what
-makes the operator resolution-agnostic. \naive{} is obtained by substituting
-uniform weights for $w$ in the adjoint contraction only.
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={draw,rounded corners=2pt,minimum height=7.5mm,inner xsep=4pt,align=center},
+  ar/.style={-{Stealth[length=2mm]},thick}
+]
+% lifted row
+\node[font=\bfseries\footnotesize] (l1) {lifted};
+\node[box,fill=cGrey!35,right=4mm of l1] (a1) {lift\\\scriptsize not sympl.};
+\node[box,fill=cUnif!40,right=3mm of a1] (a2) {symplectic\\shears};
+\node[box,fill=cGrey!35,right=3mm of a2] (a3) {project\\\scriptsize not sympl.};
+\node[box,fill=cGrey!35,right=3mm of a3] (a4) {$x+\mathcal{N}(x)$\\\scriptsize not sympl.};
+\node[right=4mm of a4,text=cCheb,font=\footnotesize\bfseries,align=left]
+     (v1) {deployed map:\\NOT symplectic};
+\draw[ar] (a1)--(a2); \draw[ar] (a2)--(a3); \draw[ar] (a3)--(a4); \draw[ar] (a4)--(v1);
+% lift-free row
+\node[font=\bfseries\footnotesize,below=11mm of l1] (l2) {lift-free};
+\node[box,fill=cUnif!40,right=4mm of l2,minimum width=46mm] (b1)
+     {symplectic shears acting directly on the PDE's $(q,p)$};
+\node[box,fill=cUnif!40,right=3mm of b1] (b2) {$x\!\mapsto\!\mathcal{N}(x)$\\\scriptsize symplectic};
+\node[right=4mm of b2,text=cUnif,font=\footnotesize\bfseries,align=left]
+     (v2) {deployed map:\\exactly symplectic};
+\draw[ar] (b1)--(b2); \draw[ar] (b2)--(v2);
+\end{tikzpicture}
+\caption{Where the guarantee is lost. The conventional wrapper surrounds a
+symplectic core with three maps that are not symplectic; the composition
+therefore carries no guarantee. \S\ref{sec:long} shows this is not a technicality:
+at $2\times10^{4}$ steps the lifted variants diverge while the lift-free ones stay
+bounded.}
+\label{fig:lift}
+\end{figure}
+
+\subsection{The variants, and why each exists}
+
+\begin{table}[t]
+\centering
+\caption{The operator variants compared, and the question each isolates.}
+\label{tab:variants}
+\small
+\begin{tabular}{@{}p{33mm}lp{56mm}@{}}
+\toprule
+variant & symplectic in & role \\
+\midrule
+\texttt{sacheb} & $\Wc$ (core only) & Chebyshev-form gradient shear, lifted \\
+\texttt{sacheb\_naive} & $\Wu$ (core only) & identical but uniform-form: isolates \emph{which} form \\
+\texttt{sacheb\_pure} & $\Wc$ (end to end) & removes the lift: isolates \emph{where} the guarantee holds \\
+\texttt{sacheb\_pure\_naive} & $\Wu$ (end to end) & both controls at once; the matched-form, fully-guaranteed operator \\
+\ckino{} & neither & the non-gradient kernel; volume-preserving only \\
+\ckino{}-strict & neither & exactly-constrained variant of \ckino{} \\
+\ckino{}-nosymp & n/a & structure removed: isolates the block's contribution \\
+SNO \citep{makara2026sno} & $\Wu$ (core only) & Fourier symplectic reference \\
+FNO, T-FNO, U-FNO, U-Net, DeepONet, Transformer & n/a & unstructured references \\
+GENERIC-FNO \citep{sulskis2026generic} & metriplectic & dissipative reference (see \S\ref{sec:limits}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:variants} lists the comparison. The design is a $2\times2$
+factorial---$\{$Chebyshev, Fourier$\}$ basis $\times$ $\{$symplectic, not$\}$,
+realised as \sacheb{}/\ckino{}/SNO/FNO---crossed with two further controls that
+vary \emph{which} form is preserved and \emph{whether the deployed map} preserves
+it.
 
 % ============================================================================
 \section{Measuring structure: the symplectic defect}
 \label{sec:defect}
 % ============================================================================
 
-Proposition~\ref{prop:shear} turns ``is this block symplectic?'' into a number.
-For a trained (or randomly initialised) shear field $F$ we form the dense
-Jacobian $A=DF$ by reverse-mode differentiation and report the scale-invariant
-\emph{relative symplectic defect}
+Proposition~\ref{prop:shear} turns the question into a number. For a shear field
+$F$ we form $A=DF$ by reverse-mode differentiation and report
 \begin{equation}
-\defect(F) \;=\; \frac{\lVert WA-A^{\top}W\rVert_F}{\lVert WA\rVert_F}
-\;\in\;[0,\infty),
+\defect_W(F) \;=\; \frac{\lVert WA-A^{\top}W\rVert_F}{\lVert WA\rVert_F},
 \label{eq:defect}
 \end{equation}
-which is zero if and only if the block preserves $\omega_W$. Because
-$\defect$ is computed from the model's own Jacobian, it is independent of the
-architecture's documentation, and applies unchanged to any $(q,p)$-shear
-architecture. We regard this instrument as a contribution in its own right: it
-converts a claim that is usually made in prose into one that can be falsified in
-one line of code.
+zero iff the block preserves $\omega_W$. Crucially we evaluate
+\eqref{eq:defect} for \emph{both} $W\in\{\Wc,\Wu\}$; reporting one column is what
+produced the erroneous conclusion of our earlier draft.
+
+\paragraph{Scaling to 3-D.} A dense Jacobian costs one backward pass per degree
+of freedom---fine at $N=32$ in $1$-D, hopeless at $16^3$. We instead use
+Hutchinson probes, $\lVert M\rVert_F^2=\mathbb{E}_v\lVert Mv\rVert^2$ with
+$Mv = W(Av)-A^{\top}(Wv)$, needing one JVP and one VJP per probe and therefore
+$O(1)$ in grid size. Against the dense path the estimator agrees to $\le7\%$ on
+$O(1)$ values and correctly returns machine zero.
 
 % ============================================================================
 \section{Experimental protocol}
 \label{sec:setup}
 % ============================================================================
 
-\paragraph{Problems.} Nine PDEs spanning linear transport, diffusion,
-oscillation, shocks, dispersion, and multi-dimensional conservative dynamics:
-advection, heat, \texttt{wave1d}, \textbf{\texttt{wave1d\_dir}}, Burgers, KdV,
-\texttt{wave2d} ($32^2$), \texttt{wave3d} ($16^3$) and \texttt{ns2d}
-($64^2$, vorticity-form Navier--Stokes). All but \texttt{wave1d\_dir} are
-periodic.
+\paragraph{Problems.} Nine PDEs: advection, heat, \texttt{wave1d},
+\textbf{\texttt{wave1d\_dir}}, Burgers, KdV, \texttt{wave2d} ($32^2$),
+\texttt{wave3d} ($16^3$) and \texttt{ns2d} ($64^2$ vorticity Navier--Stokes). All
+but \texttt{wave1d\_dir} are periodic.
 
-\texttt{wave1d\_dir} is introduced here as the discriminating rung: the wave
-equation on $[0,L]$ with homogeneous \emph{Dirichlet} boundaries, discretised on
-a uniform grid with centred differences and advanced by symplectic leap-frog,
-with initial conditions formed from a truncated Chebyshev series multiplied by
-the envelope $x(L-x)$. This construction mirrors the data-generation protocol of
+\texttt{wave1d\_dir} is the discriminating rung: the wave equation on $[0,L]$
+with homogeneous \emph{Dirichlet} boundaries, uniform grid, centred differences,
+symplectic leap-frog, and initial conditions formed from a truncated Chebyshev
+series times the envelope $x(L-x)$. This mirrors the data-generation protocol of
 \citet{makara2026sno}, so the comparison is made on the concurrent method's own
-terms. It is simultaneously Hamiltonian (so symplecticity is meaningful) and
-non-periodic (so a Fourier parameterisation is structurally mismatched: the
-periodic extension of the envelope has a derivative discontinuity at the
-boundary). The reference solver conserves energy to $2.3\times10^{-4}$ over
-$500$ steps and holds the boundary values at exactly zero.
+terms. It is simultaneously Hamiltonian (symplecticity is meaningful) and
+non-periodic (a Fourier parameterisation is mismatched). The reference solver
+conserves energy to $2.3\times10^{-4}$ over $500$ steps and holds the boundary at
+exactly zero.
 
-\paragraph{Operators.} Ten families, all parameter-matched to
-$\approx$\,25k: \sacheb{} and \naive{} (this work); \ckino{}, a Chebyshev
-kernel-integral operator with a St\"ormer--Verlet-style $(q,p)$ update, together
-with its exactly-constrained and structure-removed ablations; SNO
-\citep{makara2026sno} and GENERIC-FNO \citep{sulskis2026generic}, which we
-re-implement; and FNO \citep{li2021fno}, T-FNO
-\citep{kossaifi2023mgtfno}, U-FNO \citep{wen2022ufno}, U-Net, DeepONet
-\citep{lu2021deeponet} and a Transformer operator as unstructured references.
-
-\paragraph{Design.} Configurations cross each family with prediction mode
+\paragraph{Design.} Families are crossed with prediction mode
 $\{$recursive, non-recursive \texttt{seq2seq}$\}$, training noise
-$\{$none, $2\%\}$ and an optional PDE-residual loss, giving $31$ configurations
-in 1-D. Crucially this yields a $2\times2$ factorial---$\{$Fourier,
-Chebyshev$\}$ basis $\times$ $\{$exactly symplectic, not$\}$---realised as
-SNO / \sacheb{} / FNO / \ckino{}, plus the \naive{} adjoint ablation that varies
-symplecticity with everything else held fixed. Each cell is run with $3$ seeds on
-a single hardware (NVIDIA Tesla T4), giving $657$ training runs.
+$\{$none, $2\%\}$ and an optional PDE-residual loss, giving $33$ configurations
+in $1$-D and $21$ in $2$-D/$3$-D, all matched to $\approx$25k parameters. Three
+seeds on a single hardware (NVIDIA Tesla T4): \textbf{783 training runs}.
 
-\paragraph{Metrics.} We report relative RMS at rollout checkpoints, but not only
-that: a model can post a middling RMS while being physically dead. We
-additionally compute amplitude ratio, pattern correlation, spectral error and
-invariant drift, and collapse them into a \emph{verdict}
-(good $\to$ degraded $\to$ decorrelated $\to$ amplitude-collapse $\to$ blow-up)
-and a \emph{usable horizon} (last step with correlation $\ge0.9$ and amplitude
-ratio in $[0.7,1.4]$).
+\paragraph{Metrics.} Relative RMS at rollout checkpoints, plus amplitude ratio,
+pattern correlation, spectral error and invariant drift, collapsed into a
+\emph{verdict} and a \emph{usable horizon} (last step with correlation $\ge0.9$
+and amplitude ratio in $[0.7,1.4]$). A model can post a middling RMS while being
+physically dead, and only the decomposition separates the two.
 
 % ============================================================================
 \section{Results}
 % ============================================================================
 
-\subsection{The instrument certifies one construction and refutes another}
-\label{sec:defect-results}
+\subsection{Which form does each construction preserve?}
+\label{sec:form}
 
-Table~\ref{tab:defect} reports $\defect$ from \eqref{eq:defect} at four
-resolutions, averaged over $3$ seeds.
-
-\begin{table}[t]
+\begin{figure}[t]
 \centering
-\caption{Relative symplectic defect $\defect=\lVert WA-A^{\top}W\rVert_F/\lVert WA\rVert_F$
-from the autograd Jacobian (mean over 3 seeds). Zero iff the block preserves
-$\omega_W$.}
-\label{tab:defect}
-\begin{tabular}{lccc}
-\toprule
-grid $N$ & \sacheb{} (weighted adjoint) & \naive{} (transpose) & \ckino{} kernel \\
-\midrule
-16 & $\mathbf{2.01\times10^{-16}}$ & $0.780$ & $1.367$ \\
-24 & $\mathbf{2.23\times10^{-16}}$ & $0.683$ & $1.369$ \\
-32 & $\mathbf{2.37\times10^{-16}}$ & $0.696$ & $1.390$ \\
-48 & $\mathbf{2.97\times10^{-16}}$ & $0.653$ & $1.379$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+\includegraphics[width=\linewidth]{figs/defect_matrix.png}
+\caption{Symplectic defect of every construction against \emph{both} inner
+products, over $14$ grid configurations in $1$-D, $2$-D and $3$-D, mean of three
+seeds. The green diagonal is the result: each gradient shear is exact in the form
+its adjoint was built from and $O(1)$ in the other. The \ckino{} kernel is
+$\approx1.4$ in both---volume-preserving, not symplectic.}
+\label{fig:defect}
+\end{figure}
 
-Three conclusions follow. (i) Theorem~\ref{thm:sacheb} holds numerically: the
-defect sits at machine precision and does not grow with resolution. (ii) The
-weighted adjoint is \emph{necessary}, not cosmetic---replacing $K^{*}$ by
-$K^{\top}$ leaves an $O(1)$ violation, confirming
-Proposition~\ref{prop:necessity}. (iii) The \ckino{} kernel shear, of the kind
-often described as ``pseudo-symplectic'' because its Jacobian is triangular with
-unit diagonal, has defect $\approx1.37$: it is volume-preserving but \emph{not}
-symplectic, exactly the conflation flagged in Remark~\ref{rem:volume}. Its kernel
-\eqref{eq:lowrank} uses independent $\varphi_r,\psi_r$ and an unconstrained
-channel mix, so nothing forces $k(x,y)=k(y,x)^{\top}$.
+Figure~\ref{fig:defect} is the central measurement. Three conclusions follow.
 
-Point (iii) matters methodologically. Ablating a ``symplectic'' component that
-was never symplectic tests nothing about symplecticity. Only the \sacheb{} /
-\naive{} pair does.
+\textbf{(i)} Theorem~\ref{thm:sacheb} holds numerically: $2$--$4\times10^{-16}$,
+independent of resolution and dimension. \textbf{(ii)} The two variants are
+\emph{both} exactly symplectic, in different forms; neither is ``broken''. The
+off-diagonal grows with dimension ($\approx0.7$ in $1$-D, $\approx0.95$ in $2$-D,
+$1.0$--$1.3$ in $3$-D) because the tensor-product weight varies more.
+\textbf{(iii)} The \ckino{} kernel is $\approx1.4$ in both forms, exactly the
+conflation flagged in Remark~\ref{rem:volume}.
 
-\subsection{The controlled experiment: exact symplecticity is a cost}
+\subsection{Does the choice of form matter?}
 \label{sec:ablation}
 
-\sacheb{} and \naive{} share an architecture, a parameter count and a training
-recipe; they differ only in the adjoint, and therefore only in whether they are
-symplectic ($2\times10^{-16}$ versus $\approx0.7$). Table~\ref{tab:ablation}
-compares them at matched capacity.
+Every benchmark here is discretised on a \emph{uniform} grid, so $\Wu$ is the
+physically relevant form and $\Wc$ is not. Figure~\ref{fig:ablation} compares
+models that are identical in architecture, parameter count and training recipe
+and differ only in the adjoint.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/form_ablation.png}
+\caption{Matched-form versus mismatched-form at identical capacity (3 seeds).
+\textbf{(a)} Lifted pair: the matched-form model wins every problem, by
+$1.1$--$8.0\times$. \textbf{(b)} Lift-free pair, where the deployed map really is
+symplectic: the margin widens to $14$--$22\times$. Removing the non-symplectic
+wrapper does not just help---it amplifies the effect of getting the form right by
+an order of magnitude.}
+\label{fig:ablation}
+\end{figure}
+
+Over the full matrix the matched-form model wins \textbf{16 of 18} paired
+comparisons (the two exceptions are a tie at the divergence clip and a $1.04\times$
+gap inside one standard deviation). For the lift-free pair it is $4/4$.
 
 \begin{table}[t]
 \centering
-\caption{Controlled symplecticity ablation: relative RMS (3 seeds,
-non-recursive arm). The two models are identical except for the adjoint. Lower is
-better; \textbf{bold} marks the winner.}
-\label{tab:ablation}
-\begin{tabular}{lccc}
+\caption{Lift-free pair: both models exactly symplectic \emph{end to end},
+differing only in which form. Relative RMS, 3 seeds.}
+\label{tab:pure}
+\small
+\begin{tabular}{@{}lccc@{}}
 \toprule
-problem & \sacheb{} (exactly symplectic) & \naive{} (not symplectic) & ratio \\
+problem & \texttt{purecheb} ($\Wc$) & \texttt{pureunif} ($\Wu$) & ratio \\
 \midrule
-advection            & $0.003556$ & $\mathbf{0.001508}$ & $2.36\times$ \\
-heat                 & $0.005565$ & $\mathbf{0.003491}$ & $1.59\times$ \\
-\texttt{wave1d}      & $0.005176$ & $\mathbf{0.001530}$ & $3.38\times$ \\
-\texttt{wave1d\_dir} & $0.03667$  & $\mathbf{0.02739}$  & $1.34\times$ \\
-Burgers              & $0.09196$  & $\mathbf{0.08567}$  & $1.07\times$ \\
-KdV                  & $0.002693$ & $\mathbf{0.000627}$ & $4.30\times$ \\
+\texttt{wave1d}      & 1.5182 & \textbf{0.08809} & $17.2\times$ \\
+\texttt{wave1d\_dir} & 0.1020 & \textbf{0.08242} & $1.24\times$ \\
+\texttt{wave2d}      & 0.9332 & \textbf{0.04316} & $21.6\times$ \\
+\texttt{wave3d}      & 1.0273 & \textbf{0.07238} & $14.2\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The non-symplectic twin wins \emph{all six} problems, by factors from $1.07$ to
-$4.30$. The effect is not confined to accuracy: the long-horizon stability that
-motivates structure preservation also fails to appear---on
-\texttt{wave1d\_dir} both recursive arms diverge (relative RMS clipped at
-$10^{3}$, usable horizon $33$ steps). Figure~\ref{fig:growth} shows the
-corresponding error-growth behaviour across the study.
-
-We interpret this as a capacity-allocation effect rather than a numerical
-artefact. The constraint $WA=A^{\top}W$ removes roughly half the degrees of
-freedom of the shear Jacobian; at a fixed budget of $\approx$25k parameters that
-expressivity is evidently worth more than the geometric invariant, on horizons
-where the invariant has not yet had time to matter.
+\subsection{Long-horizon behaviour: the lift is decisive}
+\label{sec:long}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figs/growth.png}
-\caption{Error growth over the rollout (ratio of relative RMS at the last
-checkpoint to the first), per configuration and problem. Recursive arms
-accumulate error; non-recursive arms do not. Exact symplecticity does not confer
-a growth advantage.}
-\label{fig:growth}
+\includegraphics[width=\linewidth]{figs/longhorizon.png}
+\caption{Rollout to $2\times10^{4}$ steps, mean of 3 seeds. \textbf{Top:}
+relative error; the thin line marks error $=$ signal. \textbf{Bottom:} energy
+drift on the model's own trajectory. Every lifted or unstructured operator---FNO,
+SNO, \ckino{}, and the lifted \sacheb{} variants---leaves the solution manifold
+and reaches $10^{5}$--$10^{12}$. The lift-free operators stay bounded. The
+matched-form lift-free model (green) is bounded on all four problems; the
+mismatched-form one (red) survives three of four.}
+\label{fig:long}
 \end{figure}
 
-\subsection{What does help: matching the basis to the boundary conditions}
+This is the study's strongest result and it was not visible at the few-hundred-step
+horizon of the main matrix. Figure~\ref{fig:long} and Table~\ref{tab:long} show
+that exact \emph{end-to-end} symplecticity delivers precisely what the classical
+theory promises---bounded energy error over long times---and that nothing else in
+the comparison does.
+
+\begin{table}[t]
+\centering
+\caption{State at step $2\times10^{4}$ (mean of 3 seeds). Bold rows are bounded;
+the rest have left the solution manifold entirely.}
+\label{tab:long}
+\small
+\begin{tabular}{@{}llcc@{}}
+\toprule
+problem & family & relative RMS & energy drift $|\Delta E/E|$ \\
+\midrule
+\multirow{3}{*}{\texttt{wave1d}}
+ & \textbf{pureunif (lift-free, $\Wu$)} & \textbf{0.868} & \textbf{4.18} \\
+ & \textbf{purecheb (lift-free, $\Wc$)} & \textbf{1.902} & \textbf{37.9} \\
+ & SNO / FNO / lifted \sacheb{} & $2.6$--$7.2\times10^{5}$ & $10^{11}$--$10^{12}$ \\
+\midrule
+\multirow{3}{*}{\texttt{wave1d\_dir}}
+ & \textbf{pureunif} & \textbf{0.908} & \textbf{5.24} \\
+ & \textbf{purecheb} & \textbf{1.659} & \textbf{36.2} \\
+ & SNO / FNO & $3.4$--$9.4\times10^{5}$ & $10^{11}$--$10^{13}$ \\
+\midrule
+\multirow{3}{*}{\texttt{wave2d}}
+ & \textbf{pureunif} & \textbf{1.008} & \textbf{2.52} \\
+ & \textbf{purecheb} & \textbf{1.739} & \textbf{3.94} \\
+ & FNO & $7.3\times10^{5}$ & $1.7\times10^{12}$ \\
+\midrule
+\multirow{2}{*}{\texttt{wave3d}}
+ & \textbf{pureunif} & \textbf{1.047} & \textbf{1.19} \\
+ & SNO / FNO / lifted & $2.8$--$8.3\times10^{5}$ & $10^{11}$--$10^{12}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{remark}[Read the slope with the error]
+A drift exponent near zero is \emph{not} by itself evidence of health. FNO scores
+$-0.02$ on \texttt{wave1d} while sitting at relative RMS $7\times10^{5}$: once the
+state has blown up, the drift ratio saturates and its slope becomes meaningless.
+\end{remark}
+
+\paragraph{Independent corroboration.} \citet{sulskis2026generic} report the same
+qualitative effect for the metriplectic case: over $200$-step rollouts, every
+unconstrained model they test diverges or collapses while their
+structure-preserving operator stays bounded. That two constructions enforcing
+different structures (symplectic here, GENERIC there) both buy boundedness and
+little else suggests the effect is a property of exact structure preservation
+rather than of either particular bracket.
+
+\subsection{Basis versus boundary}
 \label{sec:basis}
 
-\begin{table}[t]
-\centering
-\caption{\texttt{wave1d\_dir} (Hamiltonian \emph{and} non-periodic), relative RMS
-at $t=200$, mean $\pm$ std over 3 seeds, non-recursive arm. Every Chebyshev
-operator beats every Fourier operator.}
-\label{tab:basis}
-\begin{tabular}{lc@{\hskip 2.2em}lc}
-\toprule
-\multicolumn{2}{c}{Chebyshev basis} & \multicolumn{2}{c}{Fourier basis} \\
-\cmidrule(r){1-2}\cmidrule(l){3-4}
-model & rel.\ RMS & model & rel.\ RMS \\
-\midrule
-\naive{}   & $\mathbf{0.0274 \pm 0.0011}$ & FNO   & $0.0829 \pm 0.0045$ \\
-\ckino{}   & $0.0354 \pm 0.0003$          & SNO   & $0.135  \pm 0.026$  \\
-\sacheb{}  & $0.0367 \pm 0.0047$          & T-FNO & $0.147  \pm 0.020$  \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Table~\ref{tab:basis} and Figure~\ref{fig:wave1ddir} give the central positive
-result. On a problem that is Hamiltonian \emph{and} non-periodic, the worst
-Chebyshev operator is better than the best Fourier operator. Best-to-best the
-margin is $3.0\times$; against SNO specifically---the concurrent symplectic
-operator, evaluated on a benchmark constructed to match its own data
-protocol---it is $4.9\times$. The mechanism is transparent: the Dirichlet
-envelope makes the periodic extension of the solution non-smooth at the
-boundary, and a truncated Fourier basis pays the usual Gibbs penalty there,
-whereas a Chebyshev basis does not.
-
-The converse also holds, which is what makes this a rule rather than a
-cherry-pick: on the five \emph{periodic} problems, Fourier-family operators take
-four of five winners (heat, \texttt{wave1d}, Burgers, KdV). Aggregated over all
-nine problems, Chebyshev-family operators win $5$ and Fourier-family operators
-win $4$, and the split is entirely explained by the boundary conditions rather
-than by any structural prior.
-
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.78\linewidth]{figs/rms_wave1ddir.png}
-\caption{Rollout error versus step on \texttt{wave1d\_dir}. Chebyshev-basis
-operators (including the non-symplectic \naive{}) separate cleanly from the
-Fourier family, which pays a Gibbs penalty at the Dirichlet boundary.}
-\label{fig:wave1ddir}
+\includegraphics[width=0.72\linewidth]{figs/basis_boundary.png}
+\caption{\texttt{wave1d\_dir}, the Hamiltonian non-periodic rung. Every Chebyshev
+operator beats every Fourier operator: $3.0\times$ over the best FNO and
+$4.9\times$ over SNO, on a benchmark built to match SNO's own data protocol. The
+mechanism is the Gibbs penalty the Dirichlet envelope imposes on a periodic
+basis.}
+\label{fig:basis}
 \end{figure}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/pred_wave1ddir.png}
-\caption{Ground truth (top row) and predictions on \texttt{wave1d\_dir} at
-several rollout times, all models parameter-matched. Failure modes are
-distinguishable by eye: phase drift, amplitude collapse, and boundary
-contamination in the Fourier-basis models.}
-\label{fig:pred}
-\end{figure}
+The converse holds too, which is what makes this a rule rather than a cherry-pick:
+Fourier operators take four of the five \emph{periodic} winners. Aggregated over
+all nine problems the split is Chebyshev~5 / Fourier~4, and is explained by the
+boundary conditions rather than by any structural prior.
 
 \subsection{Accuracy across the full matrix}
 
-Figure~\ref{fig:multiseed} summarises all nine problems. Table~\ref{tab:winners}
-lists the winner per problem. The headline is the \emph{absence} of a structural
-pattern: the two exactly symplectic families in the study (\sacheb{}, SNO) win
-two of nine problems between them, and both of those wins (\texttt{wave1d}, KdV)
-are on \emph{periodic} problems where the Fourier basis, not the symplectic
-structure, is the plausible cause---SNO's non-symplectic Fourier sibling T-FNO is
-competitive on exactly those rungs.
-
 \begin{table}[t]
 \centering
-\caption{Best configuration per problem (relative RMS, mean $\pm$ std over 3
-seeds). $\dagger$: SNO, GENERIC-FNO and \sacheb{} are implemented in 1-D only, so
-the multi-dimensional rows are contested by FNO alone.}
+\caption{Best configuration per problem (relative RMS, mean $\pm$ std, 3 seeds).}
 \label{tab:winners}
-\begin{tabular}{llcl}
+\small
+\begin{tabular}{@{}llcl@{}}
 \toprule
-problem & best model & rel.\ RMS & basis \\
+problem & best model & relative RMS & basis \\
 \midrule
-advection            & \ckino{} (recursive)      & $0.00109 \pm 0.00057$ & Chebyshev \\
-heat                 & T-FNO (recursive)         & $0.00109 \pm 0.00031$ & Fourier \\
-\texttt{wave1d}      & SNO (non-recursive)       & $0.00130 \pm 0.00016$ & Fourier \\
-\texttt{wave1d\_dir} & \naive{} (non-recursive)  & $0.0274  \pm 0.0011$  & Chebyshev \\
-Burgers              & T-FNO (recursive)         & $0.00396 \pm 0.00098$ & Fourier \\
-KdV                  & SNO (non-recursive)       & $0.000467\pm 0.000063$& Fourier \\
-\texttt{wave2d}      & \ckino{} (recursive)$^\dagger$     & $0.0289 \pm 0.0083$ & Chebyshev \\
-\texttt{wave3d}      & \ckino{} (non-recursive)$^\dagger$ & $0.1386 \pm 0.0373$ & Chebyshev \\
-\texttt{ns2d}        & \ckino{} (non-recursive)$^\dagger$ & $0.188  \pm 0.002$  & Chebyshev \\
+advection            & \ckino{} (recursive)            & $0.001092 \pm 0.00057$ & Chebyshev \\
+heat                 & T-FNO (recursive)               & $0.001090 \pm 0.00031$ & Fourier \\
+\texttt{wave1d}      & SNO (seq2seq)                   & $0.001298 \pm 0.00016$ & Fourier \\
+\texttt{wave1d\_dir} & \texttt{sacheb\_naive} (seq2seq)& $0.027387 \pm 0.0011$  & Chebyshev \\
+Burgers              & T-FNO (recursive)               & $0.003963 \pm 0.00098$ & Fourier \\
+KdV                  & SNO (seq2seq)                   & $0.000467 \pm 0.000063$& Fourier \\
+\texttt{wave2d}      & \texttt{sacheb\_naive} (seq2seq)& $0.007771 \pm 0.0015$  & Chebyshev \\
+\texttt{wave3d}      & \texttt{pureunif} (recursive)   & $0.072375 \pm 0.0089$  & Chebyshev \\
+\texttt{ns2d}        & \texttt{sacheb\_naive} (seq2seq)& $0.174500 \pm 0.0014$  & Chebyshev \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -629,153 +773,145 @@ KdV                  & SNO (non-recursive)       & $0.000467\pm 0.000063$& Fouri
 \centering
 \includegraphics[width=\linewidth]{figs/multiseed.png}
 \caption{Relative RMS (log scale, mean $\pm$ std over 3 seeds) for every
-configuration, one panel per problem. All models are matched to
-$\approx$25k parameters.}
+configuration, one panel per equation, all matched to $\approx$25k parameters.}
 \label{fig:multiseed}
 \end{figure}
 
-\subsection{Supporting axes}
+Against the parameter-matched references the margins in higher dimensions are
+$19.8\times$ over FNO on \texttt{wave2d}, $8.8\times$ over FNO and $4.8\times$
+over SNO on \texttt{wave3d}, and $1.5\times$/$1.4\times$ on \texttt{ns2d}. We
+stress that SNO is now competitive in $2$-D ($1.0\times$), which the earlier
+version of this study could not have detected because SNO had no $N$-dimensional
+implementation there.
 
-\paragraph{Capacity.} A budget sweep from 6k to 400k parameters shows that the
-Chebyshev family's failure on Burgers is a \emph{representational} ceiling, not
-an undertraining artefact: the error is flat at $\approx0.25$ across a
-$60\times$ range of capacity. Likewise the recursive KdV instability persists at
-every budget. Neither failure is fixed by scale.
-
-\paragraph{Discretisation invariance.} Training at $N=64$ and evaluating the same
-weights at $N=128$, the Fourier operators are exactly invariant (degradation
-ratio $1.00$--$1.02$; \citealp{li2021fno,kovachki2023neural}), whereas the
-Chebyshev operator with a fixed-stencil lifting layer degrades by $57\times$ on
-advection and $3.0\times$ on KdV. Replacing the lift with a spectral-derivative
-lift restores exact invariance ($1.00$ on all three problems) but costs one to
-two orders of magnitude of accuracy at the training grid. Chebyshev operators
-thus face an invariance-versus-accuracy trade-off that the Fourier family does
-not. We report this as a limitation of our own construction.
-
-\paragraph{Inference speed.} Against the spectral reference solver the operators
-lose on cheap linear problems (fixed overhead dominates: $0.07$--$0.37\times$ on
-advection, heat and \texttt{wave1d}) and win only where the reference is
-expensive ($3.2\times$ for FNO on Burgers, $7.7\times$ on KdV; $2.3\times$ for
-\ckino{} on KdV). ``Neural operators are faster'' is a statement about the
-solver being replaced, not about the operator.
-
-\paragraph{Metrics.} Figure~\ref{fig:verdict} shows why RMS alone is
-insufficient: several configurations with unremarkable RMS are physically dead or
-amplitude-collapsed, and only the amplitude/correlation decomposition separates
-them.
+\subsection{Unconstrained capacity}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.9\linewidth]{figs/verdict.png}
-\caption{Worst physical verdict per (configuration, problem) over 3 seeds.
-Green: good. Darker: degraded, decorrelated, amplitude-collapsed, blow-up. White:
-not applicable. Several black cells carry unremarkable RMS values.}
-\label{fig:verdict}
+\includegraphics[width=\linewidth]{figs/capacity.png}
+\caption{Accuracy against parameter count with the matched budget removed; the
+dashed line marks the 25k budget used in Table~\ref{tab:winners}. The ranking is
+budget-dependent, so the matched table should be read as ``best at 25k'' rather
+than ``best architecture''.}
+\label{fig:capacity}
 \end{figure}
 
+Two observations. On \texttt{wave1d\_dir} the two end-to-end symplectic models
+take the top two slots outright ($0.0742$ and $0.0755$)---the only problem where
+they win the unconstrained comparison, and the only Hamiltonian non-periodic one.
+And cost-efficiency diverges sharply from peak accuracy: on \texttt{wave3d} SNO's
+$0.00271$ costs $1.36$M parameters while \texttt{sacheb\_naive} reaches $0.00345$
+with $49{,}750$---\textbf{27$\times$ cheaper for $1.3\times$ worse}.
+
+\subsection{Supporting axes}
+\label{sec:support}
+
+\paragraph{Darcy (elliptic, Dirichlet).} \ckino{} attains $8.7\times$ lower
+relative $L^2$ error than FNO overall and $18.3\times$ lower \emph{at the
+boundary}, transferring zero-shot from $64^2$ to $128^2$. This is the clearest
+non-periodic win for the Chebyshev basis.
+
+\paragraph{Capacity ceilings.} A 6k--400k sweep shows \ckino{}'s Burgers failure
+is \emph{representational}, flat at $\approx0.25$ across a $60\times$ range, and
+its recursive KdV instability persists at every budget. Neither is fixed by scale.
+
+\paragraph{Discretisation invariance.} Training at $N=64$ and evaluating at
+$N=128$, SNO and T-FNO are essentially exactly invariant ($0.99$--$1.00$)
+\emph{and} accurate. \ckino{} with a convolutional lift degrades by $57\times$ on
+advection; the spectral lift restores invariance ($0.998$) but costs one to two
+orders of magnitude of accuracy at the training grid
+($8.2\times10^{-4}\!\to\!0.475$). This is a genuine weakness of the Chebyshev
+construction, and SNO/T-FNO win the axis outright.
+
+\paragraph{Inference speed.} Operators beat the reference solver only where the
+solver is expensive: FNO is $3.2\times$ on Burgers, $7.7\times$ on KdV and
+$5.8\times$ on \texttt{ns2d}; \ckino{} is $2.3\times$ on KdV but $0.07\times$ on
+advection.
+
 % ============================================================================
-\section{Where our contribution is stronger}
-\label{sec:better}
+\section{Where each construction wins}
 % ============================================================================
 
-It is worth stating plainly what this work does better than the alternatives, and
-where it does not.
-
-\begin{enumerate}\itemsep2pt
-\item \textbf{Exact symplecticity off the torus.} \sacheb{} is, to our knowledge,
-the first neural operator that is exactly symplectic on a \emph{non-periodic}
-domain, certified at $2\times10^{-16}$ and resolution-independently
-(Table~\ref{tab:defect}). \citet{makara2026sno} achieve exactness on the torus
-and state the non-canonical/non-periodic extension as open; our
-Theorem~\ref{thm:sacheb} closes the non-periodic half of that gap, and identifies
-the weighted adjoint as the obstruction that makes it non-trivial
-(Remark~\ref{rem:invisible}).
-
-\item \textbf{Accuracy on non-periodic Hamiltonian problems.} On
-\texttt{wave1d\_dir}, evaluated on a data protocol matching
-\citet{makara2026sno}'s own, the Chebyshev family beats every Fourier operator:
-$3.0\times$ over the best Fourier model and $4.9\times$ over SNO
-(Table~\ref{tab:basis}). The same basis advantage appears on an elliptic Darcy
-problem with Dirichlet boundaries, where our operator attains $8.3\times$ lower
-relative $L^2$ error than FNO overall and $17\times$ lower error \emph{at the
-boundary}, while transferring zero-shot from a $64^2$ to a $128^2$ grid.
-
-\item \textbf{Multi-dimensional conservative problems.} Against the
-parameter-matched FNO, our Chebyshev operator is $5.3\times$ better on
-\texttt{wave2d}, $4.6\times$ better on \texttt{wave3d} (where FNO's usable
-horizon collapses to $2$ steps against $150$), and $1.4\times$ better on
-\texttt{ns2d}.
-
-\item \textbf{Falsifiability.} We contribute an instrument \eqref{eq:defect} that
-makes structure-preservation claims checkable, and we apply it first to our own
-architecture---where it shows a previously asserted guarantee to be false
-(\S\ref{sec:defect-results}). We know of no comparable audit in this literature.
-
-\item \textbf{Experimental control.} Prediction mode and training noise are
-varied as explicit factors rather than bundled into a single ``our method''
-configuration, at matched capacity, with three seeds and physical verdicts. This
-is what allows the symplecticity ablation of \S\ref{sec:ablation} to be read
-causally.
-\end{enumerate}
-
-Conversely, we are worse where the basis is wrong for the problem: on smooth
-periodic problems with shocks (Burgers) the Chebyshev basis has a hard
-representational ceiling that no budget removes, and our operator lacks the
-automatic discretisation invariance of a Fourier parameterisation.
+\begin{table}[t]
+\centering
+\caption{Honest summary. No single operator dominates; the axes separate.}
+\label{tab:verdict}
+\small
+\begin{tabular}{@{}lp{56mm}p{48mm}@{}}
+\toprule
+construction & wins & loses \\
+\midrule
+\texttt{pureunif} (lift-free, $\Wu$)
+ & long horizon (only bounded operator at $2\times10^{4}$ steps); \texttt{wave3d} at 25k; top of the unconstrained \texttt{wave1d\_dir} sweep
+ & needs a canonical $(q,p)$ pair, so undefined on scalar fields; limited capacity per parameter \\
+\addlinespace
+\texttt{sacheb\_naive} (lifted, $\Wu$)
+ & \texttt{wave1d\_dir}, \texttt{wave2d}, \texttt{ns2d} at 25k; best accuracy-per-parameter in $3$-D
+ & no long-horizon guarantee; diverges like the rest at $10^4$ steps \\
+\addlinespace
+\ckino{}
+ & advection at 25k; advection/heat unconstrained by $10^{2}$--$10^{3}\times$; Darcy by $8.7\times$ ($18.3\times$ at the boundary)
+ & not symplectic in any form; Burgers ceiling; KdV instability; poor discretisation invariance \\
+\addlinespace
+SNO \citep{makara2026sno}
+ & \texttt{wave1d}, KdV; discretisation invariance; competitive in $2$-D
+ & Fourier basis mismatched on non-periodic domains ($4.9\times$); expensive in $3$-D \\
+\addlinespace
+T-FNO \citep{kossaifi2023mgtfno}
+ & heat, Burgers; invariance
+ & no structure; long-horizon divergence \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 % ============================================================================
 \section{Limitations}
+\label{sec:limits}
 % ============================================================================
 
-\textbf{Scope of the negative result.} Our refutation is specific: matched
-$\approx$25k capacity, rollouts of a few hundred steps, nine PDEs, one hardware.
-Symplectic integrators are classically motivated by behaviour over very long
-horizons; it remains possible that the ordering reverses at horizons well beyond
-those studied here, or at much larger capacity where the constraint costs
-proportionally less.
+\textbf{Re-implementations.} SNO and GENERIC-FNO are our implementations from the
+published descriptions and were not tuned to the authors' protocols.
 
-\textbf{Re-implementations.} SNO and GENERIC-FNO are our re-implementations from
-the published descriptions, in 1-D only, and were not tuned to the authors'
-protocols. Consequently the multi-dimensional comparisons are against FNO alone.
-Our GENERIC-FNO re-implementation additionally failed to train: parameterising
-the PSD multiplier as $M=b(k)^2$ with $b$ initialised at zero places it at a
-saddle ($\partial M/\partial b=2b=0$), so the dissipative channel never
-activates and the remaining skew update grows under the explicit step. This is a
-defect of our implementation, not evidence about the published method, and no
-conclusion should be drawn from those rows.
+\textbf{Our GENERIC-FNO bug.} It diverged in all 12 entries. Parameterising the
+PSD multiplier as $M=b^2$ with $b$ initialised at zero places it at a saddle
+($\partial M/\partial b=2b=0$), so the dissipative channel never activates. This
+is a defect of our implementation, \emph{not} evidence about the published
+method, and no conclusion should be drawn from those rows.
 
-\textbf{Canonical structure only.} \sacheb{} assumes a canonical $(q,p)$ split.
-Non-canonical Hamiltonian PDEs---KdV under the Gardner bracket being the obvious
-example---are not covered, and a learned Poisson structure with a Jacobi
-guarantee remains open; \citet{sulskis2026generic} note the same gap for the
-metriplectic case.
+\textbf{Canonical structure only.} The lift-free construction needs a canonical
+$(q,p)$ pair and is therefore undefined on the scalar-field problems (advection,
+heat, Burgers, KdV, \texttt{ns2d}). KdV is Hamiltonian only under the
+non-canonical Gardner bracket, which we do not cover.
 
-\textbf{Scale.} Domains are small ($32$--$64$ points in 1-D, $32^2$, $16^3$,
-$64^2$), which is adequate to resolve the orderings reported but is not a
-deployment benchmark.
+\textbf{Scale and horizon.} Domains are small ($32$--$64$ points in $1$-D, $32^2$,
+$16^3$, $64^2$), adequate to resolve the reported orderings but not a deployment
+benchmark. $2\times10^{4}$ steps separates bounded from unbounded but is still far
+short of the regimes where backward-error analysis is usually invoked.
+
+\textbf{Figure provenance.} The field panels in Figures~\ref{fig:fields-dir} and
+\ref{fig:fields-long} are produced by a local reproduction with a reduced training
+schedule, because the GPU field archive did not survive download. They are
+qualitative; the orderings match the tables, the absolute errors are not the
+reported ones. All other figures come directly from the reported runs.
 
 % ============================================================================
 \section{Conclusion}
 % ============================================================================
 
-We set out to test, rather than assume, the premise that geometric structure
-helps a learned operator. Doing so required fixing a subtle error---on a
-non-uniform grid the $L^2$ adjoint is $W^{-1}K^{\top}W$, not $K^{\top}$---which
-yields the first exactly symplectic neural operator on a non-periodic domain, and
-building an instrument that measures symplecticity instead of asserting it. The
-instrument immediately showed that a widely-used ``pseudo-symplectic'' block is
-not symplectic at all, and the construction made a clean ablation possible for
-the first time. The answer that came back is negative: at matched capacity, an
-exactly symplectic operator is beaten by its own non-symplectic twin on every
-1-D problem we tried, and gains no stability. What does predict performance is
-mundane and actionable---match the basis to the boundary conditions. We think the
-right conclusion is not that structure preservation is worthless, but that in
-this literature it has been argued far more often than it has been measured, and
-that the measurement is cheap.
-
-\paragraph{Reproducibility.} All experiments are driven by a single harness with
-fixed seeds; the symplectic-defect instrument is a self-contained script, and
-every number in this paper is produced by it or by the benchmark runner.
+We set out to test whether geometric structure helps a learned operator and found
+that the question, as usually posed, is incomplete. Symplecticity is defined
+relative to an inner product; on a non-uniform grid two reasonable
+implementations preserve two different forms, both exactly, and only measurement
+distinguishes them. Once the form is named, the answer is clean: matching it to
+the grid wins $16$ of $18$ comparisons, and $4$ of $4$ by an order of magnitude
+more when the deployed map---not merely its core---carries the guarantee. That
+same construction is the only one in our study to survive a $2\times10^{4}$-step
+rollout. Structure preservation pays; it is simply forfeited by the wrapper the
+field conventionally puts around it, and invisible unless you say with respect to
+what. We also retract a symplecticity theorem of our own that mistook unit
+Jacobian determinant for preservation of $\omega$, and we think the general
+lesson is that such claims should be measured rather than argued---the
+measurement costs one line of autograd.
 
 % ============================================================================
 \begin{thebibliography}{99}\small
@@ -839,7 +975,7 @@ N.~Kovachki, Z.~Li, B.~Liu, K.~Azizzadenesheli, K.~Bhattacharya, A.~Stuart, and
 A.~Anandkumar.
 \newblock Neural Operator: Learning Maps Between Function Spaces with
 Applications to PDEs.
-\newblock \emph{Journal of Machine Learning Research}, 24(89):1--97, 2023.
+\newblock \emph{Journal of Machine Learning Research}, 24(89):4061--4157, 2023.
 arXiv:2108.08481.
 
 \bibitem[Li et al.(2021)]{li2021fno}
@@ -943,44 +1079,75 @@ Y.~D. Zhong, B.~Dey, and A.~Chakraborty.
 
 \appendix
 % ============================================================================
+\section{Qualitative field comparisons}
+\label{app:fields}
+% ============================================================================
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figs/fields_wave1d_dir.png}
+\caption{\texttt{wave1d\_dir}: reference solver (grey) against operator
+prediction, displacement $u(x,t)$ at five rollout times. The Chebyshev operators
+track the Dirichlet boundary; the Fourier operators accumulate the Gibbs error
+that Figure~\ref{fig:basis} quantifies. Reduced-schedule local reproduction, see
+\S\ref{sec:limits}.}
+\label{fig:fields-dir}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figs/fields_longrollout.png}
+\caption{\texttt{wave1d} under long autoregressive rollout. The lift-free
+operators remain on the solution manifold at $5{,}000$ steps while FNO has left it
+by $1{,}000$. This is Figure~\ref{fig:long} viewed as fields rather than curves.
+Reduced-schedule local reproduction, see \S\ref{sec:limits}.}
+\label{fig:fields-long}
+\end{figure}
+
+% ============================================================================
 \section{Retraction of a previously asserted guarantee}
 \label{app:retraction}
 % ============================================================================
 
-The \ckino{} operator studied here was originally documented with an exact
-symplecticity theorem. We retract it, and record the error because it is
-instructive and, we suspect, not unique to us.
+The \ckino{} operator was originally documented with an exact symplecticity
+theorem. We retract it, and record the error because it is instructive.
 
 The withdrawn argument ran: each St\"ormer--Verlet substep has a Jacobian that is
 triangular with unit diagonal blocks, hence determinant $1$, hence preserves
 $\omega$. The step from ``determinant $1$'' to ``preserves $\omega$'' is invalid.
 By Proposition~\ref{prop:shear}, $\det D\Phi=1$ holds for every shear, while
 preservation of $\omega_W$ additionally requires $WA=A^{\top}W$. The operator's
-kernel \eqref{eq:lowrank} uses independent $\varphi_r,\psi_r$ and an
-unconstrained channel-mixing matrix, so $A$ is not self-adjoint; the measured
-defect is $\approx1.37$ (Table~\ref{tab:defect}). A corollary energy-drift bound,
-whose proof invoked the modified-Hamiltonian machinery of backward error analysis
-\citep{hairer2006gni}, is retracted with it: that machinery requires
-symplecticity, and volume preservation alone does not imply the existence of a
-modified Hamiltonian.
+kernel \eqref{eq:ckino-kernel} uses independent $\varphi_r,\psi_r$ and an
+unconstrained channel mix, so $A$ is not self-adjoint; the measured defect is
+$\approx1.4$ in \emph{both} candidate forms (Figure~\ref{fig:defect}). A corollary
+energy-drift bound, whose proof invoked the modified-Hamiltonian machinery of
+backward error analysis \citep{hairer2006gni}, is retracted with it: that
+machinery requires symplecticity, and volume preservation alone does not imply
+the existence of a modified Hamiltonian.
+
+A second, subtler retraction concerns the comparison itself. An earlier draft
+reported that exact symplecticity was a measurable cost, on the basis of a
+defect table computed against a single inner product. Scoring both variants
+against both forms (Figure~\ref{fig:defect}) shows the ``non-symplectic'' control
+was exactly symplectic in the uniform form all along, and reverses the
+conclusion.
 
 % ============================================================================
 \section{The weighted adjoint in the low-rank basis}
 \label{app:lowrank}
 % ============================================================================
 
-We verify the adjoint pair \eqref{eq:lowrank}. With
-$\alpha_r=\iprod{\psi_r}{v}_W$ and $(Kv)(x)=\sum_r\varphi_r(x)M_r\alpha_r$,
+With $\alpha_r=\iprod{\psi_r}{v}_W$ and $(Kv)(x)=\sum_r\varphi_r(x)M_r\alpha_r$,
 \[
 \iprod{Kv}{g}_W
 =\sum_r (M_r\alpha_r)^{\top}\iprod{\varphi_r}{g}_W
 =\sum_r \alpha_r^{\top}\big(M_r^{\top}\iprod{\varphi_r}{g}_W\big)
 =\Big\langle v,\;\sum_r \psi_r\,M_r^{\top}\iprod{\varphi_r}{g}_W\Big\rangle_W,
 \]
-which is exactly $\iprod{v}{K^{*}g}_W$ for $K^{*}$ as given in
-\eqref{eq:lowrank}. Hence in this parameterisation the weighted adjoint is
-obtained by exchanging the roles of $\varphi$ and $\psi$ and transposing the
-channel mixing---no inverse of $W$ is ever formed, and the construction remains
-$O(RN)$.
+which is exactly $\iprod{v}{K^{*}g}_W$. Hence the weighted adjoint is obtained by
+exchanging $\varphi$ and $\psi$ and transposing the channel mixing; no inverse of
+$W$ is formed and the cost remains $O(RN^d)$. In $d$ dimensions the weight is the
+outer product of the per-axis weights and remains diagonal, so both this identity
+and Theorem~\ref{thm:sacheb} carry over unchanged.
 
 \end{document}

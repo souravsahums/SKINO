@@ -31,6 +31,11 @@ def main(argv=None):
     ap.add_argument("--datastore", default="workspaceartifactstore")
     ap.add_argument("--with-fields", action="store_true",
                     help="also download fields_*.npz (large ~200 MB) into a separate zip")
+    ap.add_argument("--since-hours", type=float, default=24.0,
+                    help="only fetch jobs within this many hours of the newest one; "
+                         "guards against silently merging two runs of the same experiment")
+    ap.add_argument("--all-runs", action="store_true",
+                    help="fetch every completed job regardless of age (may mix runs)")
     args = ap.parse_args(argv)
 
     from azure.identity import DefaultAzureCredential
@@ -53,6 +58,38 @@ def main(argv=None):
 
     done = [j for j in ml.jobs.list()
             if getattr(j, "experiment_name", None) == args.experiment and j.status == "Completed"]
+
+    # Artefact names are identical across runs (paper_kdv_..._sub_fno_plain.json is
+    # the same name every time), so fetching an experiment that has been run twice
+    # silently merges them, last write winning. Keep only the newest `--since-hours`
+    # of jobs unless the user explicitly asks for everything.
+    def _started(j):
+        for attr in ("creation_context", "properties"):
+            ctx = getattr(j, attr, None)
+            ts = getattr(ctx, "created_at", None) if ctx else None
+            if ts:
+                return ts
+        return None
+
+    if args.since_hours and not args.all_runs:
+        import datetime as _dt
+        stamped = [(j, _started(j)) for j in done]
+        known = [t for _, t in stamped if t]
+        if known:
+            newest = max(known)
+            cutoff = newest - _dt.timedelta(hours=args.since_hours)
+            kept = [j for j, t in stamped if t and t >= cutoff]
+            dropped = len(done) - len(kept)
+            if dropped:
+                print(f"[filter] newest job at {newest:%Y-%m-%d %H:%M}; keeping the "
+                      f"{len(kept)} job(s) within {args.since_hours}h of it, "
+                      f"skipping {dropped} older one(s).")
+                print("         (use --all-runs to merge every run -- note that "
+                      "identical filenames will overwrite each other)")
+            done = kept
+        else:
+            print("[filter] job timestamps unavailable; fetching all runs")
+
     print(f"{len(done)} completed jobs in '{args.experiment}'")
     os.makedirs(args.out, exist_ok=True)
 
@@ -75,7 +112,7 @@ def main(argv=None):
                     fh.write(data)
                 got += 1
                 total += 1
-            elif args.with_fields and base.startswith("fields_") and base.endswith(".npz"):
+            elif args.with_fields and base.startswith(("fields_", "lhfields_")) and base.endswith(".npz"):
                 dst = os.path.join(args.out, base)
                 if not os.path.exists(dst):  # one file per (problem,config); first job wins
                     data = cc.download_blob(blob.name).readall()
