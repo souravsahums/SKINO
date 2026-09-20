@@ -190,12 +190,66 @@ standard and not claimed as contributions.
 \label{sec:background}
 % ============================================================================
 
-Let $\Omega=[-1,1]$ be discretised on the $N+1$ Chebyshev--Gauss--Lobatto (CGL)
-nodes $x_j=\cos(j\pi/N)$. Functions are represented by nodal values, and the
-physical $L^2$ product is approximated by Clenshaw--Curtis quadrature
+\subsection{Notation}
+\label{sec:notation}
+
+Table~\ref{tab:notation} collects every symbol used in the paper. Vectors are
+columns, $^{\top}$ is the plain matrix transpose, and $^{*}$ is reserved for the
+adjoint with respect to a weighted inner product---the distinction between the
+two is the subject of the paper.
+
+% deliberately NOT a float: the reader must meet the notation before the algebra
+\begin{center}
+\captionof{table}{Symbols and notation.}
+\label{tab:notation}
+\small
+\begin{tabular}{@{}llp{78mm}@{}}
+\toprule
+symbol & reads as & meaning \\
+\midrule
+$\Omega_{\mathrm{d}}$ & --- & spatial domain, taken as $[-1,1]$ in $1$-D \\
+$d$ & --- & number of spatial dimensions, $d\in\{1,2,3\}$ \\
+$N$ & --- & grid index; a $1$-D grid carries $N{+}1$ nodes \\
+$x_j=\cos(j\pi/N)$ & --- & Chebyshev--Gauss--Lobatto (CGL) nodes \\
+$w_j>0$ & --- & quadrature weight at node $j$ \\
+$W=\mathrm{diag}(w_j)$ & --- & weight matrix; \emph{diagonal and positive} \\
+$\Wc$, $\Wu$ & --- & the two candidate weight matrices: Clenshaw--Curtis weights on CGL nodes, and constant weights (a uniform grid) \\
+$\iprod{f}{g}_W=f^{\top}Wg$ & ``$f$ dot $g$ in $W$'' & discrete $L^2$ inner product \\
+$K$ & --- & a linear (kernel-integral) operator \\
+$K^{\top}$ & ``$K$ transpose'' & matrix transpose \\
+$K^{*}=W^{-1}K^{\top}W$ & ``$K$ adjoint'' & adjoint \emph{with respect to} $\iprod{\cdot}{\cdot}_W$ \\
+$q,p$ & --- & the two halves of a canonical phase-space state \\
+$z=(q,p)$ & --- & a point of phase space $\mathbb{P}$ \\
+$\omega_W$ & ``omega'' & symplectic form induced by $W$, eq.~\eqref{eq:omega} \\
+$\Omega$ & --- & matrix of $\omega_W$, eq.~\eqref{eq:omega} \\
+$\Phi$ & ``Phi'' & one shear map of phase space \\
+$D\Phi$ & --- & Jacobian of $\Phi$ \\
+$F,G$ & --- & the update (shear) fields \\
+$A=DF$ & --- & Jacobian of the shear field \\
+$R$, $\rho=R'$ & ``rho'' & scalar potential and its derivative, applied pointwise \\
+$D=\mathrm{diag}(\rho'(\cdot))$ & --- & diagonal matrix of pointwise slopes \\
+$\mathcal{E}$ & ``script E'' & learned energy functional \\
+$\nabla_W$ & ``grad in $W$'' & gradient with respect to $\iprod{\cdot}{\cdot}_W$ \\
+$\varphi_r,\psi_r$ & ``phi, psi'' & the $r$-th left/right basis functions of the kernel \\
+$M_r$ & --- & channel-mixing matrix of mode $r$ \\
+$R$ (rank) & --- & Mercer rank; context distinguishes it from the potential $R$ \\
+$\sigma_r$ & ``sigma'' & learned positive Mercer scale \\
+$C$, $H$ & --- & physical and hidden channel counts \\
+$\defect_W$ & ``defect'' & relative symplectic defect, eq.~\eqref{eq:defect} \\
+$\lVert\cdot\rVert_F$ & ``Frobenius norm'' & $\lVert X\rVert_F^2=\sum_{ij}X_{ij}^2$ \\
+$[S,M]=SM-MS$ & ``commutator'' & used in Proposition~\ref{prop:necessity} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{The discrete inner product}
+
+Let $\Omega_{\mathrm{d}}=[-1,1]$ be discretised on the $N+1$ CGL nodes
+$x_j=\cos(j\pi/N)$. Functions are represented by nodal values, and the physical
+$L^2$ product is approximated by Clenshaw--Curtis quadrature
 \citep{trefethen2000spectral},
 \begin{equation}
-\iprod{f}{g}_W \;=\; \int_\Omega f g\,dx \;\approx\; f^{\top} W g,
+\iprod{f}{g}_W \;=\; \int_{\Omega_{\mathrm{d}}} f g\,dx \;\approx\; f^{\top} W g,
 \qquad W=\mathrm{diag}(w_0,\dots,w_N),\quad w_j>0 .
 \label{eq:ip}
 \end{equation}
@@ -448,6 +502,69 @@ Proposition~\ref{prop:shear}. In $d$ dimensions the weight is the outer product
 $W=\bigotimes_a W_a$, still diagonal, so the argument is unchanged.
 \end{proof}
 
+Theorem~\ref{thm:sacheb} says the block is symplectic in \emph{the form its
+adjoint was built from}. It says nothing about any other form, and the next
+result shows that the omission is not a technicality: it is the whole content of
+the paper, and it predicts the pattern measured in Figure~\ref{fig:defect}.
+
+\begin{proposition}[Which form, and only which form]
+\label{prop:necessity}
+Fix a positive diagonal $W_1$ and build the shear field with the adjoint taken in
+$W_1$, i.e.\ $F(q)=K^{*}_{W_1}\rho(Kq)$ with $K^{*}_{W_1}=W_1^{-1}K^{\top}W_1$,
+so that $A=K^{*}_{W_1}DK$. Let $W_2$ be any other positive diagonal weight. Then
+\begin{equation}
+W_2A - A^{\top}W_2 \;=\; [\,S,\,M\,] \;=\; SM-MS,
+\qquad S := W_2W_1^{-1},\quad M := K^{\top}W_1DK ,
+\label{eq:commutator}
+\end{equation}
+where $S$ is diagonal and $M$ is symmetric. Consequently
+\begin{equation}
+\big(W_2A-A^{\top}W_2\big)_{ij} = (s_i-s_j)\,M_{ij},
+\label{eq:entrywise}
+\end{equation}
+and the shear is symplectic in $\omega_{W_2}$ \emph{for every} $K$ and $\rho$ if
+and only if $W_2\propto W_1$.
+\end{proposition}
+
+\begin{proof}
+Since $W_1$ is symmetric, $(K^{*}_{W_1})^{\top}=(W_1^{-1}K^{\top}W_1)^{\top}
+=W_1KW_1^{-1}$. Diagonal matrices commute, so $W_1D=DW_1$ and
+$W_1^{-1}W_2=W_2W_1^{-1}=S$. Then
+\[
+W_2A = W_2W_1^{-1}K^{\top}W_1DK = S\,\big(K^{\top}W_1DK\big) = SM ,
+\]
+\[
+A^{\top}W_2 = K^{\top}D\,(K^{*}_{W_1})^{\top}W_2
+            = K^{\top}D\,W_1KW_1^{-1}W_2
+            = \big(K^{\top}W_1DK\big)S = MS ,
+\]
+which gives \eqref{eq:commutator}. $M$ is symmetric because
+$M^{\top}=K^{\top}(W_1D)^{\top}K=K^{\top}DW_1K=K^{\top}W_1DK=M$. Writing
+$S=\mathrm{diag}(s_i)$ gives $(SM-MS)_{ij}=s_iM_{ij}-M_{ij}s_j$, which is
+\eqref{eq:entrywise}.
+
+For the equivalence: if $W_2=cW_1$ then $S=cI$, every $s_i-s_j$ vanishes and so
+does the defect---recovering Theorem~\ref{thm:sacheb} at $c=1$. Conversely,
+suppose $W_2\not\propto W_1$, so there are indices $i\neq j$ with $s_i\neq s_j$.
+Choose $D=I$ (take $\rho'\equiv1$) and $K=e_ie_i^{\top}+e_je_j^{\top}$; then
+$M=K^{\top}W_1K$ has $M_{ij}=0$, so pick instead
+$K=(e_i+e_j)e_i^{\top}+(e_i+e_j)e_j^{\top}$, for which
+$M_{ij}=(w_{1,i}+w_{1,j})\neq0$. By \eqref{eq:entrywise} the $(i,j)$ entry of the
+defect is $(s_i-s_j)M_{ij}\neq0$, so the shear is not symplectic in
+$\omega_{W_2}$ for that parameter choice.
+\end{proof}
+
+\begin{remark}[The defect scales with the spread of $W_2/W_1$]
+\label{rem:spread}
+Equation~\eqref{eq:entrywise} says the mismatch is governed entirely by the
+\emph{spread} of the ratio $s_i=w_{2,i}/w_{1,i}$: a larger dynamic range in
+$W_2W_1^{-1}$ produces a larger defect. This is a falsifiable prediction, and
+Figure~\ref{fig:defect} bears it out---the off-diagonal entries grow from
+$\approx0.7$ in $1$-D to $\approx0.95$ in $2$-D and $1.0$--$1.3$ in $3$-D,
+precisely because the tensor-product weight $\bigotimes_a W_a$ has a wider
+dynamic range as $d$ grows.
+\end{remark}
+
 \paragraph{Low-rank realisation.} With
 $Kv=\sum_r\varphi_r M_r\iprod{\psi_r}{v}_W$ the weighted adjoint is
 $K^{*}g=\sum_r\psi_r M_r^{\top}\iprod{\varphi_r}{g}_W$ (Appendix~\ref{app:lowrank}):
@@ -553,11 +670,43 @@ zero iff the block preserves $\omega_W$. Crucially we evaluate
 produced the erroneous conclusion of our earlier draft.
 
 \paragraph{Scaling to 3-D.} A dense Jacobian costs one backward pass per degree
-of freedom---fine at $N=32$ in $1$-D, hopeless at $16^3$. We instead use
-Hutchinson probes, $\lVert M\rVert_F^2=\mathbb{E}_v\lVert Mv\rVert^2$ with
-$Mv = W(Av)-A^{\top}(Wv)$, needing one JVP and one VJP per probe and therefore
-$O(1)$ in grid size. Against the dense path the estimator agrees to $\le7\%$ on
-$O(1)$ values and correctly returns machine zero.
+of freedom---fine at $N=32$ in $1$-D, hopeless at $16^3$. Proposition~\ref{prop:hutch}
+replaces it with a probe estimator whose cost is independent of the grid.
+
+\begin{proposition}[Unbiased probe estimator for the defect]
+\label{prop:hutch}
+Let $M_\ast := WA-A^{\top}W$ and let $v\sim\mathcal{N}(0,I)$. Then
+\begin{equation}
+M_\ast v \;=\; W(Av)\;-\;A^{\top}(Wv),
+\qquad
+\mathbb{E}_v\big[\lVert M_\ast v\rVert^2\big] \;=\; \lVert M_\ast\rVert_F^2 ,
+\label{eq:hutch}
+\end{equation}
+so averaging $\lVert M_\ast v\rVert^2$ over $m$ independent probes is an unbiased
+estimator of $\lVert M_\ast\rVert_F^2$. Each probe costs one Jacobian-vector
+product ($Av$) and one vector-Jacobian product ($A^{\top}u$), both $O(1)$ in the
+number of degrees of freedom.
+\end{proposition}
+
+\begin{proof}
+The first identity is linearity: $(WA-A^{\top}W)v=W(Av)-A^{\top}(Wv)$, and the two
+terms are exactly a JVP and a VJP of the shear field, so neither requires $A$ to
+be formed. For the second, $\mathbb{E}[vv^{\top}]=I$ gives
+\[
+\mathbb{E}_v\big[\lVert M_\ast v\rVert^2\big]
+= \mathbb{E}_v\big[v^{\top}M_\ast^{\top}M_\ast v\big]
+= \mathrm{tr}\big(M_\ast^{\top}M_\ast\,\mathbb{E}[vv^{\top}]\big)
+= \mathrm{tr}\big(M_\ast^{\top}M_\ast\big)
+= \lVert M_\ast\rVert_F^2 .
+\]
+The same argument applied to $WA$ estimates the denominator of
+\eqref{eq:defect}, so the ratio is formed from two estimates sharing the JVP.
+\end{proof}
+
+We use $m=96$ probes. Against the dense path the estimator agrees to $\le7\%$ on
+$O(1)$ values and correctly returns machine zero; the dense path is retained
+wherever the state has at most $1200$ degrees of freedom, and is what the
+estimator is validated against.
 
 % ============================================================================
 \section{Experimental protocol}
@@ -728,6 +877,40 @@ structure-preserving operator stays bounded. That two constructions enforcing
 different structures (symplectic here, GENERIC there) both buy boundedness and
 little else suggests the effect is a property of exact structure preservation
 rather than of either particular bracket.
+
+\paragraph{The same result seen as fields.} Figures~\ref{fig:fields-dir} and
+\ref{fig:fields-long} show the rollout as the state itself rather than as summary
+curves. They make two things visible that Figure~\ref{fig:long} cannot. First,
+the failure modes are \emph{qualitatively different}: blow-up (the lifted
+variants and FNO), amplitude collapse (SNO), and graceful roughening at preserved
+amplitude (lift-free). Second, amplitude collapse produces a field that is
+numerically well behaved---no overflow, bounded norm---while carrying none of the
+physics, which is precisely the case an RMS-only evaluation at short horizon
+would pass.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/timelapse_wave1d_dir.png}
+\caption{\texttt{wave1d\_dir} time lapse over the $2\times10^{4}$-step rollout:
+reference solver (grey) against operator prediction. Row labels carry each
+family's population error over all test trajectories, so a single plotted
+trajectory cannot be over-read. The \emph{lifted} SA-Cheb and FNO blow up; SNO
+collapses to a low-amplitude oscillation---bounded, but carrying none of the
+physics; only the \emph{lift-free} operators track the wave to $2\times10^{4}$
+steps.}
+\label{fig:fields-dir}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/timelapse_wave2d.png}
+\caption{\texttt{wave2d} displacement field over the same rollout. The reference
+solver sustains a coherent interference pattern throughout. The lift-free
+matched-form operator degrades gracefully into noise while remaining bounded; the
+\emph{lifted} variant---same shear algebra, same parameters, only the wrapper
+differs---has diverged by $2\times10^{4}$, and FNO by $10^{3}$.}
+\label{fig:fields-long}
+\end{figure}
 
 \subsection{Basis versus boundary}
 \label{sec:basis}
@@ -1120,35 +1303,6 @@ Y.~D. Zhong, B.~Dey, and A.~Chakraborty.
 \end{thebibliography}
 
 \appendix
-% ============================================================================
-\section{Qualitative field comparisons}
-\label{app:fields}
-% ============================================================================
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\linewidth]{figs/timelapse_wave1d_dir.png}
-\caption{\texttt{wave1d\_dir} time lapse over the $2\times10^{4}$-step rollout:
-reference solver (grey) against operator prediction. Row labels carry each
-family's population error over all test trajectories, so a single plotted
-trajectory cannot be over-read. Three distinct failure modes are visible and are
-not interchangeable: the \emph{lifted} SA-Cheb and FNO blow up; SNO collapses to
-a low-amplitude oscillation---bounded, but carrying none of the physics; only the
-\emph{lift-free} operators track the wave to $2\times10^{4}$ steps.}
-\label{fig:fields-dir}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\linewidth]{figs/timelapse_wave2d.png}
-\caption{\texttt{wave2d} displacement field over the same rollout. The reference
-solver sustains a coherent interference pattern throughout. The lift-free
-matched-form operator degrades gracefully into noise while remaining bounded; the
-\emph{lifted} variant---same shear algebra, same parameters, only the wrapper
-differs---has diverged by $2\times10^{4}$, and FNO by $10^{3}$.}
-\label{fig:fields-long}
-\end{figure}
-
 % ============================================================================
 \section{Retraction of a previously asserted guarantee}
 \label{app:retraction}

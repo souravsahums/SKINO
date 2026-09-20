@@ -156,9 +156,32 @@ Three readings. **(i)** The guarantee is numerical, resolution-independent and
 dimension-independent — the ND weight is an outer product of per-axis weights and
 remains diagonal, so the commutation argument carries over unchanged. **(ii)**
 Both variants are exactly symplectic; the "naive" label was wrong. The
-off-diagonal grows with dimension (≈0.7 in 1-D, ≈0.95 in 2-D, 1.0–1.3 in 3-D)
-because the tensor-product weight varies more. **(iii)** The CKINO kernel is
-≈1.4 in *both* forms — volume-preserving, not symplectic.
+off-diagonal grows with dimension (≈0.7 in 1-D, ≈0.95 in 2-D, 1.0–1.3 in 3-D).
+**(iii)** The CKINO kernel is ≈1.4 in *both* forms — volume-preserving, not
+symplectic.
+
+### Why the matrix has exactly this shape
+
+The diagonal pattern is not a coincidence, and the dimensional trend in (ii) is
+predicted rather than observed after the fact. Build the shear with the adjoint
+taken in $W_1$, so $A = K^{*}_{W_1} D K$, and score it against some other
+positive diagonal $W_2$. Then
+
+$$W_2 A - A^{\top} W_2 \;=\; [\,S,\,M\,], \qquad S := W_2 W_1^{-1}, \quad M := K^{\top} W_1 D K$$
+
+with $S$ diagonal and $M$ symmetric, so entrywise
+
+$$\big(W_2 A - A^{\top} W_2\big)_{ij} \;=\; (s_i - s_j)\, M_{ij}.$$
+
+Two consequences. The defect vanishes for *every* kernel and nonlinearity **iff**
+$W_2 \propto W_1$ — which is the diagonal of the matrix, and recovers exactness
+as the special case $W_2 = W_1$. And the size of the mismatch is governed by the
+**spread of the ratio** $s_i = w_{2,i}/w_{1,i}$: the wider its dynamic range, the
+larger the defect. A tensor-product weight $\bigotimes_a W_a$ has a wider range
+as $d$ grows, which is exactly the 0.7 → 0.95 → 1.0–1.3 trend measured in (ii).
+
+The derivation and its converse are given in the accompanying paper; the identity
+is verified numerically to machine precision in `track2/test_propositions.py`.
 
 ---
 
