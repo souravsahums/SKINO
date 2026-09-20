@@ -19,6 +19,19 @@
 \usetikzlibrary{positioning,arrows.meta,fit,backgrounds,calc,shapes.geometric}
 \captionsetup{font=small,labelfont=bf}
 
+% --- float placement ---------------------------------------------------------
+% This document is float-dense. With the stock parameters LaTeX's deferral queue
+% backs up and dumps the results figures after the bibliography, where they read
+% as an appendix. Relax the limits and forbid floats from crossing a section.
+\usepackage[section]{placeins}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{4}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.7}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.75}
+
 \newtheorem{theorem}{Theorem}
 \newtheorem{proposition}[theorem]{Proposition}
 \newtheorem{lemma}[theorem]{Lemma}
@@ -254,7 +267,7 @@ $L^2$ product is approximated by Clenshaw--Curtis quadrature
 \label{eq:ip}
 \end{equation}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/weights.png}
 \caption{The geometric fact the paper rests on. \textbf{(a)} CGL nodes cluster
@@ -348,7 +361,7 @@ controllable.
 can be evaluated on any CGL grid. Figure~\ref{fig:ckino} shows the pipeline; the
 components are as follows.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
   font=\small,
@@ -447,7 +460,7 @@ with $K^{*}$ the weighted adjoint \eqref{eq:adjoint}. The block alternates
 \label{eq:block}
 \end{equation}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
   font=\small,
@@ -590,7 +603,7 @@ capacity must come from rank and depth instead. This requires a canonical
 $(q,p)$ pair and so applies only to two-field problems.
 \end{itemize}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
   font=\small,
@@ -625,7 +638,7 @@ bounded.}
 
 \subsection{The variants, and why each exists}
 
-\begin{table}[t]
+\begin{table}[htbp]
 \centering
 \caption{The operator variants compared, and the question each isolates.}
 \label{tab:variants}
@@ -747,7 +760,7 @@ physically dead, and only the decomposition separates the two.
 \subsection{Which form does each construction preserve?}
 \label{sec:form}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/defect_matrix.png}
 \caption{Symplectic defect of every construction against \emph{both} inner
@@ -776,7 +789,7 @@ physically relevant form and $\Wc$ is not. Figure~\ref{fig:ablation} compares
 models that are identical in architecture, parameter count and training recipe
 and differ only in the adjoint.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/form_ablation.png}
 \caption{Matched-form versus mismatched-form at identical capacity (3 seeds).
@@ -792,7 +805,7 @@ Over the full matrix the matched-form model wins \textbf{16 of 18} paired
 comparisons (the two exceptions are a tie at the divergence clip and a $1.04\times$
 gap inside one standard deviation). For the lift-free pair it is $4/4$.
 
-\begin{table}[t]
+\begin{table}[htbp]
 \centering
 \caption{Lift-free pair: both models exactly symplectic \emph{end to end},
 differing only in which form. Relative RMS, 3 seeds.}
@@ -813,7 +826,7 @@ problem & \texttt{purecheb} ($\Wc$) & \texttt{pureunif} ($\Wu$) & ratio \\
 \subsection{Long-horizon behaviour: the lift is decisive}
 \label{sec:long}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/longhorizon.png}
 \caption{Rollout to $2\times10^{4}$ steps, mean of 3 seeds. \textbf{Top:}
@@ -832,7 +845,7 @@ that exact \emph{end-to-end} symplecticity delivers precisely what the classical
 theory promises---bounded energy error over long times---and that nothing else in
 the comparison does.
 
-\begin{table}[t]
+\begin{table}[htbp]
 \centering
 \caption{State at step $2\times10^{4}$ (mean of 3 seeds). Bold rows are bounded;
 the rest have left the solution manifold entirely.}
@@ -888,7 +901,7 @@ numerically well behaved---no overflow, bounded norm---while carrying none of th
 physics, which is precisely the case an RMS-only evaluation at short horizon
 would pass.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/timelapse_wave1d_dir.png}
 \caption{\texttt{wave1d\_dir} time lapse over the $2\times10^{4}$-step rollout:
@@ -901,7 +914,7 @@ steps.}
 \label{fig:fields-dir}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/timelapse_wave2d.png}
 \caption{\texttt{wave2d} displacement field over the same rollout. The reference
@@ -915,7 +928,7 @@ differs---has diverged by $2\times10^{4}$, and FNO by $10^{3}$.}
 \subsection{Basis versus boundary}
 \label{sec:basis}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=0.72\linewidth]{figs/basis_boundary.png}
 \caption{\texttt{wave1d\_dir}, the Hamiltonian non-periodic rung. Every Chebyshev
@@ -935,7 +948,7 @@ explain the split.
 
 \subsection{Accuracy across the full matrix}
 
-\begin{table}[t]
+\begin{table}[htbp]
 \centering
 \caption{Best configuration per problem (relative RMS, mean $\pm$ std, 3 seeds).}
 \label{tab:winners}
@@ -962,7 +975,7 @@ Chebyshev model varies by $15.7\times$ across seeds there, and the winner change
 between two executions of the study (\S\ref{sec:repro}). We do not claim it.}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/multiseed.png}
 \caption{Relative RMS (log scale, mean $\pm$ std over 3 seeds) for every
@@ -979,7 +992,7 @@ implementation there.
 
 \subsection{Unconstrained capacity}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figs/capacity.png}
 \caption{Accuracy against parameter count with the matched budget removed; the
@@ -1059,7 +1072,7 @@ advection.
 \section{Where each construction wins}
 % ============================================================================
 
-\begin{table}[t]
+\begin{table}[htbp]
 \centering
 \caption{Honest summary. No single operator dominates; the axes separate.}
 \label{tab:verdict}
