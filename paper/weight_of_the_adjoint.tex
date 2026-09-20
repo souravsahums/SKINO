@@ -990,6 +990,14 @@ stress that SNO is now competitive in $2$-D ($1.0\times$), which the earlier
 version of this study could not have detected because SNO had no $N$-dimensional
 implementation there.
 
+Table~\ref{tab:winners} lists a single best model per problem because that is the
+conventional presentation, but it overstates how decisive most of those rows are.
+Applying the tie rule of \S\ref{sec:repro}---a gap smaller than the sum of the two
+seed standard deviations is not a result---only five of the nine problems have a
+clear winner (\texttt{wave1d\_dir}, \texttt{wave3d}, \texttt{ns2d} to our
+construction; KdV to SNO; Burgers to T-FNO). Advection, heat, \texttt{wave1d} and
+\texttt{wave2d} are ties. We give the resulting tally in \S\ref{sec:verdict}.
+
 \subsection{Unconstrained capacity}
 
 \begin{figure}[htbp]
@@ -1009,15 +1017,21 @@ And cost-efficiency diverges sharply from peak accuracy: on \texttt{wave3d} SNO'
 $0.00271$ costs $1.36$M parameters while \texttt{sacheb\_naive} reaches $0.00345$
 with $49{,}750$---\textbf{27$\times$ cheaper for $1.3\times$ worse}.
 
-\subsection{Reproducibility: which findings actually hold}
+\subsection{Replication: a standard we think this literature needs}
 \label{sec:repro}
 
-The full study was executed twice on the cluster. That was unintentional, but it
-is the most useful control we have, so we report it as one.
+Operator-learning papers are almost never replicated, including by their own
+authors. Seed counts of three are common, margins of a few percent are reported
+as wins, and there is usually no way for a reader to tell which of those wins
+would survive re-running the study. We are in a position to check, because the
+entire matrix---all $783$ runs---was executed twice on the cluster. The
+duplication was not planned, but treating it as a control is the most useful
+thing we can do with it, and we argue the practice should be routine rather than
+accidental.
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
-\caption{Claims under an accidental replication of the entire study.}
+\caption{Every headline claim under a full re-execution of the study.}
 \label{tab:repro}
 \small
 \begin{tabular}{@{}lccl@{}}
@@ -1033,15 +1047,20 @@ winner, advection & \ckino{} $0.001092$ & SNO $0.001196$ & \emph{flipped} \\
 \end{tabular}
 \end{table}
 
-The advection flip has a clear cause: the contending Chebyshev configuration
-varies by $15.7\times$ across seeds there ($0.00062$ to $0.00968$) against SNO's
-$1.4\times$. That is not a close race between two good models; it is one unstable
-configuration occasionally landing well. We report advection as a tie.
+The one claim that did not survive is instructive. On advection the contending
+Chebyshev configuration varies by $15.7\times$ across seeds ($0.00062$ to
+$0.00968$) against SNO's $1.4\times$. That is not a close race between two good
+models; it is one unstable configuration occasionally landing well. Under a
+single execution it would have been reported as a win for our own operator. We
+report advection as a tie.
 
-The general lesson applies beyond this study: \textbf{with three seeds,
-differences smaller than the seed spread are not results}. Every finding we
-advance in \S\ref{sec:intro-claims} survived a full replication with margins of
-$1.4$--$22\times$; the one that did not survive had a margin of $1.1\times$.
+Two things follow. First, as a methodological rule: \textbf{with three seeds, a
+difference smaller than the seed spread is not a result}. Every claim we advance
+in \S\ref{sec:intro-claims} survived re-execution with margins of
+$1.4$--$22\times$; the single claim that did not had a margin of $1.1\times$.
+Second, as a reporting standard: the seed spread should be published alongside
+the mean, because it is what tells a reader whether a margin is load-bearing.
+We report both throughout.
 
 \subsection{Supporting axes}
 \label{sec:support}
@@ -1056,12 +1075,15 @@ is \emph{representational}, flat at $\approx0.25$ across a $60\times$ range, and
 its recursive KdV instability persists at every budget. Neither is fixed by scale.
 
 \paragraph{Discretisation invariance.} Training at $N=64$ and evaluating at
-$N=128$, SNO and T-FNO are essentially exactly invariant ($0.99$--$1.00$)
-\emph{and} accurate. \ckino{} with a convolutional lift degrades by $57\times$ on
-advection; the spectral lift restores invariance ($0.998$) but costs one to two
+$N=128$, \textbf{SNO and T-FNO win this axis outright}: they are essentially
+exactly invariant ($0.99$--$1.00$) \emph{and} accurate, which is the combination
+that matters. \ckino{} with a convolutional lift degrades by $57\times$ on
+advection; the spectral lift restores invariance ($0.998$) but costs two to three
 orders of magnitude of accuracy at the training grid
-($8.2\times10^{-4}\!\to\!0.475$). This is a genuine weakness of the Chebyshev
-construction, and SNO/T-FNO win the axis outright.
+($8.2\times10^{-4}\!\to\!0.475$). There is no setting of our construction that is
+both invariant and accurate, and we do not have a fix. If a workflow requires
+evaluating at a resolution it did not train on, that is a decisive argument for
+the Fourier family and against ours.
 
 \paragraph{Inference speed.} Operators beat the reference solver only where the
 solver is expensive: FNO is $3.2\times$ on Burgers, $7.7\times$ on KdV and
@@ -1070,11 +1092,13 @@ advection.
 
 % ============================================================================
 \section{Where each construction wins}
+\label{sec:verdict}
 % ============================================================================
 
 \begin{table}[htbp]
 \centering
-\caption{Honest summary. No single operator dominates; the axes separate.}
+\caption{Honest summary. No single operator dominates; the axes separate, and
+two of the four axes go to the Fourier family.}
 \label{tab:verdict}
 \small
 \begin{tabular}{@{}lp{56mm}p{48mm}@{}}
@@ -1090,12 +1114,12 @@ construction & wins & loses \\
  & no long-horizon guarantee; diverges like the rest at $10^4$ steps \\
 \addlinespace
 \ckino{}
- & advection at 25k; advection/heat unconstrained by $10^{2}$--$10^{3}\times$; Darcy by $8.7\times$ ($18.3\times$ at the boundary)
- & not symplectic in any form; Burgers ceiling; KdV instability; poor discretisation invariance \\
+ & advection/heat unconstrained by $10^{2}$--$10^{3}\times$; Darcy by $8.7\times$ ($18.3\times$ at the boundary)
+ & not symplectic in any form; Burgers ceiling; KdV instability; worst discretisation invariance in the study \\
 \addlinespace
 SNO \citep{makara2026sno}
- & \texttt{wave1d}, KdV; discretisation invariance; competitive in $2$-D
- & Fourier basis mismatched on non-periodic domains ($4.9\times$); expensive in $3$-D \\
+ & KdV outright, and ties advection, \texttt{wave1d} and \texttt{wave2d}; \textbf{discretisation invariance outright}; competitive in $2$-D
+ & Fourier basis mismatched on non-periodic domains ($6.5\times$ on \texttt{wave1d\_dir}); expensive in $3$-D ($1.36$M parameters for its best) \\
 \addlinespace
 T-FNO \citep{kossaifi2023mgtfno}
  & heat, Burgers; invariance
@@ -1103,6 +1127,23 @@ T-FNO \citep{kossaifi2023mgtfno}
 \bottomrule
 \end{tabular}
 \end{table}
+
+We want to be explicit about the shape of this table rather than let it be read
+selectively. Counting a problem as a tie whenever the gap between the two best
+families is smaller than the sum of their seed standard deviations---the rule
+\S\ref{sec:repro} argues for---only \emph{five} of the nine problems have a clear
+winner: \texttt{wave1d\_dir}, \texttt{wave3d} and \texttt{ns2d} to our
+construction, KdV to SNO, Burgers to T-FNO. The remaining four (advection, heat,
+\texttt{wave1d}, \texttt{wave2d}) are ties. Splitting ties evenly the tally is
+ours $5.0$, SNO $2.5$, T-FNO $1.5$.
+
+Our construction wins the two axes it was designed for---behaviour under long
+rollout, and accuracy on non-periodic and multi-dimensional domains. It loses the
+two it was not. \textbf{SNO wins discretisation invariance outright}, being
+simultaneously invariant and accurate where our operator can be only one or the
+other, and the Fourier family wins or ties every periodic $1$-D problem. A reader
+whose workload is periodic, or who must evaluate at a resolution the model was
+not trained on, should use a Fourier operator.
 
 % ============================================================================
 \section{Limitations}

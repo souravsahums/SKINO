@@ -361,10 +361,15 @@ inside an inversion loop, that trade is usually the right one.
 
 ---
 
-## 10. Reproducibility: which findings actually hold
+## 10. Replication: a standard this literature needs
 
-The full study was executed twice on the cluster. That was unintentional, but it
-is the most useful control in this report, so we treat it as one.
+Operator-learning studies are almost never replicated, including by their own
+authors. Seed counts of three are normal, margins of a few percent get reported
+as wins, and a reader has no way to tell which of those wins would survive a
+re-run. We can check, because the entire matrix — all 783 runs — was executed
+twice on the cluster. The duplication was not planned; treating it as a control
+is the most useful thing to do with it, and we think the practice should be
+routine rather than accidental.
 
 | claim | execution A | execution B | verdict |
 |---|---|---|---|
@@ -374,15 +379,38 @@ is the most useful control in this report, so we treat it as one.
 | winner, 8 of 9 equations | — | — | **stable** |
 | winner, advection | CKINO 0.001092 | SNO 0.001196 | **flipped** |
 
-The advection flip has a clear cause: `ckino_plain` on advection has a **15.7×
-spread across seeds** (0.00062 to 0.00968), against SNO's 1.4×. That is not a
-close race between two good models; it is one unstable configuration occasionally
-landing well. We therefore report advection as a tie and do not claim it.
+The one claim that did not survive is the instructive one. On advection the
+contending Chebyshev configuration varies by **15.7× across seeds** (0.00062 to
+0.00968) against SNO's 1.4×. That is not a close race between two good models;
+it is one unstable configuration occasionally landing well. Under a single
+execution it would have been published as a win for our own operator.
 
-The general lesson, and it applies well beyond this study: **with three seeds,
-differences smaller than the seed spread are not results.** The findings we
-advance in §1 are those that survived an accidental replication with margins of
-1.4× to 22×. The one that did not survive was a 1.1× margin.
+Two things follow. As a rule: **with three seeds, a difference smaller than the
+seed spread is not a result.** Every claim in §1 survived re-execution with
+margins of 1.4× to 22×; the single claim that did not had a margin of 1.1×. And
+as a reporting standard: publish the seed spread next to the mean, because that
+is what tells a reader whether a margin is load-bearing.
+
+### What the tie rule does to the scoreboard
+
+Applying that rule to §8 — a gap smaller than the sum of the two seed standard
+deviations is a tie — **only five of the nine equations have a clear winner**:
+
+| equation | call | to |
+|---|---|---|
+| `wave1d_dir` | win, 3.11× | ours |
+| `wave3d` | win, 4.80× | ours |
+| `ns2d` | win, 1.45× | ours |
+| KdV | win, 1.69× | SNO |
+| Burgers | win, 2.80× | T-FNO |
+| advection | **tie**, 1.10× | SNO / ours |
+| heat | **tie**, 2.03× | T-FNO / ours |
+| `wave1d` | **tie**, 1.37× | SNO / ours |
+| `wave2d` | **tie**, 1.04× | ours / SNO |
+
+Splitting ties evenly: **ours 5.0, SNO 2.5, T-FNO 1.5.** The single-winner table
+in §8 is the conventional presentation, but it overstates how decisive most of
+those rows are.
 
 ---
 
@@ -409,23 +437,24 @@ instability persists at every budget. Neither is fixed by scale, and both are
 honest limits of the Chebyshev kernel on shock-forming and strongly dispersive
 problems.
 
-### 11.3 Discretisation invariance — a real trade-off
+### 11.3 Discretisation invariance — where we lose outright
 
 Training at $N=64$ and evaluating at $N=128$:
 
 | operator | advection | heat | KdV | accuracy at $N$=64 |
 |---|---|---|---|---|
-| SNO | 1.00 | 1.00 | 0.99 | 0.0017 |
-| T-FNO | 1.00 | 1.00 | 1.00 | 0.0029 |
+| **SNO** | **1.00** | **1.00** | **0.99** | **0.0017** |
+| **T-FNO** | **1.00** | **1.00** | **1.00** | **0.0029** |
 | FNO | 1.02 | 1.02 | 1.01 | 0.0145 |
 | CKINO (conv lift) | **57.4** | 1.14 | 3.02 | 0.00082 |
 | CKINO (spectral lift) | **1.00** | 1.00 | 1.00 | 0.475 |
 
-The spectral lift restores exact invariance but costs two to three orders of
-magnitude of accuracy at the training grid. **SNO and T-FNO win this axis
-outright** — invariant *and* accurate. If your workflow requires evaluating at a
-resolution you did not train on, that is a decisive argument for the Fourier
-family, and a genuine weakness of the Chebyshev construction.
+**SNO and T-FNO win this axis outright** — invariant *and* accurate, which is the
+combination that matters. Our construction can be one or the other but not both:
+the spectral lift restores exact invariance at a cost of two to three orders of
+magnitude of accuracy at the training grid. We do not have a fix. If your
+workflow requires evaluating at a resolution you did not train on, that is a
+decisive argument for the Fourier family and against ours.
 
 ### 11.4 Inference speed
 
