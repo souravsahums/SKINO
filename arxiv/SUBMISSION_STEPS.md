@@ -34,14 +34,22 @@ certainly succeed too.
    domain matters for step 0.3.
 2. **Author identity.** Add your ORCID under *Account → ORCID*. It links this
    paper to your author page permanently and costs a minute now.
-3. **Endorsement.** You must be endorsed for the primary category `cs.LG`
-   before you can submit to it. Check your user page — if `cs.LG` is not in
-   your endorsed list, arXiv will show an endorsement code partway through the
-   submission and you will need a colleague who has published in `cs.LG` to
-   enter it at <https://arxiv.org/auth/endorse>. Registering from an
-   institutional email often produces an automatic endorsement, but do not
-   assume it. **Start the submission early enough that an endorsement delay
-   does not cost you a week.**
+3. **Endorsement — already held, nothing to do.** Endorsement attaches to your
+   account per category, not per paper: it is required only "before submitting
+   their first paper to arXiv or a new category." You are endorsed for `cs.LG`
+   from a previous submission, and a rejected paper does not revoke it —
+   arXiv revokes endorsement only for policy violations. `math.NA` and
+   `physics.comp-ph` are cross-lists, which do not require endorsement.
+   Two caveats that *do* follow from a prior decline:
+   - Moderation policy states that submitters with previously delayed or
+     declined works "should anticipate closer scrutiny on future
+     submissions." Budget the full one-to-four day moderation window.
+   - If the declined paper was an earlier version of this work, moderators may
+     treat this as a revision rather than a new submission and ask that the two
+     be consolidated or versioned. Appendix A retracts our own earlier
+     theorem, which makes the relationship visible. Pre-empt it in the
+     **Comments** field: `Supersedes and corrects an earlier unannounced
+     submission; see Appendix A.`
 4. **Co-author consent.** You are submitting on behalf of Gareth O'Brien as
    well. Have his explicit sign-off on the final PDF before step 5 — after
    announcement the only way to change anything is a new version.
