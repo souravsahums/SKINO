@@ -29,34 +29,37 @@ certainly succeed too.
 
 ## Step 0 — Before you start (do this first; it can block you for days)
 
-1. **Account.** Log in at <https://arxiv.org/user>. If you do not have an
-   account, register with your `@microsoft.com` address — an institutional
-   domain matters for step 0.3.
-2. **Author identity.** Add your ORCID under *Account → ORCID*. It links this
+1. **Account.** Log in at <https://arxiv.org/user>.
+2. **Use your institutional email.** The paper lists both authors at Microsoft,
+   so the arXiv account submitting it should carry `sahusourav@microsoft.com`,
+   not a personal address. arXiv has an identity-and-affiliation policy, and
+   its endorsement documentation states that an institutional address
+   expedites handling. An account on a personal domain submitting a paper that
+   claims a corporate affiliation is an avoidable mismatch. Add or switch the
+   address under *Account* before submitting.
+3. **Author identity.** Add your ORCID under *Account → ORCID*. It links this
    paper to your author page permanently and costs a minute now.
-3. **Endorsement — already held, nothing to do.** Endorsement attaches to your
+4. **Endorsement — already held, nothing to do.** Endorsement attaches to your
    account per category, not per paper: it is required only "before submitting
    their first paper to arXiv or a new category." You are endorsed for `cs.LG`
    from a previous submission, and a rejected paper does not revoke it —
    arXiv revokes endorsement only for policy violations. `math.NA` and
    `physics.comp-ph` are cross-lists, which do not require endorsement.
-   Two caveats that *do* follow from a prior decline:
-   - Moderation policy states that submitters with previously delayed or
-     declined works "should anticipate closer scrutiny on future
-     submissions." Budget the full one-to-four day moderation window.
-   - If the declined paper was an earlier version of this work, moderators may
-     treat this as a revision rather than a new submission and ask that the two
-     be consolidated or versioned. Appendix A retracts our own earlier
-     theorem, which makes the relationship visible. Pre-empt it in the
-     **Comments** field: `Supersedes and corrects an earlier unannounced
-     submission; see Appendix A.`
-4. **Co-author consent.** You are submitting on behalf of Gareth O'Brien as
-   well. Have his explicit sign-off on the final PDF before step 5 — after
+
+   Note that endorsement is **not** transitive through co-authorship. A
+   co-author with a publication record does not endorse you, and in this case
+   could not: endorsement eligibility requires papers in the same endorsement
+   domain submitted within the last five years, whereas Gareth's arXiv record
+   (arXiv:1001.2922, arXiv:1011.1085) is `physics.geo-ph` and dates to 2010.
+   This is moot because you are already endorsed, but do not plan around a
+   mechanism that does not exist.
+5. **Co-author consent.** You are submitting on behalf of Gareth O'Brien as
+   well. Have his explicit sign-off on the final PDF before Step 6 — after
    announcement the only way to change anything is a new version.
-5. **Decide the license now** (step 4.7 makes it irrevocable). Recommendation:
-   **CC BY 4.0**. It is the most permissive option that still requires
-   attribution, and it is what TMLR and most ML venues expect. The
-   arXiv-only perpetual license is the restrictive default — avoid it.
+6. **Decide the license now.** Step 5 records it, and it cannot be walked
+   back. Recommendation: **CC BY 4.0**. It is the most permissive option that
+   still requires attribution, and it is what TMLR and most ML venues expect.
+   The arXiv-only perpetual license is the restrictive default — avoid it.
 
 ---
 
@@ -274,10 +277,16 @@ revisions stop appearing in the daily mailings.
 
 ## Step 8 — After it is live
 
-1. Add the arXiv ID to the repo `README.md`.
-2. If you submit to TMLR, put the arXiv ID in the submission — TMLR permits
+1. **Have Gareth claim the paper.** He is already a registered arXiv author
+   (arXiv:1001.2922, arXiv:1011.1085), so claiming attaches this work to his
+   existing author page instead of creating a second identity for him. He can
+   claim it immediately with the paper password, or request ownership without
+   it. Doing this also restores his endorsement eligibility clock, which
+   currently sits outside arXiv's five-year activity window.
+2. Add the arXiv ID to the repo `README.md`.
+3. If you submit to TMLR, put the arXiv ID in the submission — TMLR permits
    and expects public preprints.
-3. Once published, add the **Journal ref** and **DOI** on arXiv. Those two
+4. Once published, add the **Journal ref** and **DOI** on arXiv. Those two
    fields are the only metadata you can update without creating a new version.
 
 ---
