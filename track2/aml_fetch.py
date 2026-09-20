@@ -11,8 +11,9 @@ storage *account key* and download with it - but this storage account has
 blobs directly with the AAD credential (the same one that made job submission
 work), which the account permits.
 
-    python -m track2.aml_fetch
-    # download results_gpu.zip via Jupyter, unzip into track2/results_gpu/ locally
+    python -m track2.aml_fetch --since 2026-09-11 --with-fields
+    # download results_gpu.zip and results_gpu_fields.zip via Jupyter,
+    # unzip both into track2/results_gpu/ locally
 """
 from __future__ import annotations
 
@@ -30,10 +31,14 @@ def main(argv=None):
     ap.add_argument("--out", default="results_gpu")
     ap.add_argument("--datastore", default="workspaceartifactstore")
     ap.add_argument("--with-fields", action="store_true",
-                    help="also download fields_*.npz (large ~200 MB) into a separate zip")
-    ap.add_argument("--since-hours", type=float, default=24.0,
-                    help="only fetch jobs within this many hours of the newest one; "
-                         "guards against silently merging two runs of the same experiment")
+                    help="also download fields_*.npz / lhfields_*.npz (large) into a separate zip")
+    ap.add_argument("--since", default=None, metavar="YYYY-MM-DD",
+                    help="only fetch jobs CREATED on or after this date (UTC). Artefact "
+                         "names repeat across runs, so without this a twice-run "
+                         "experiment is silently merged. Accepts YYYY-MM-DD or ISO.")
+    ap.add_argument("--since-hours", type=float, default=None,
+                    help="alternative to --since: keep jobs within this many hours of "
+                         "the newest one")
     ap.add_argument("--all-runs", action="store_true",
                     help="fetch every completed job regardless of age (may mix runs)")
     args = ap.parse_args(argv)
@@ -61,8 +66,10 @@ def main(argv=None):
 
     # Artefact names are identical across runs (paper_kdv_..._sub_fno_plain.json is
     # the same name every time), so fetching an experiment that has been run twice
-    # silently merges them, last write winning. Keep only the newest `--since-hours`
-    # of jobs unless the user explicitly asks for everything.
+    # silently merges them. Filter by job creation date, and process oldest-first so
+    # that when names do collide the NEWEST run deterministically wins.
+    import datetime as _dt
+
     def _started(j):
         for attr in ("creation_context", "properties"):
             ctx = getattr(j, attr, None)
@@ -71,29 +78,56 @@ def main(argv=None):
                 return ts
         return None
 
-    if args.since_hours and not args.all_runs:
-        import datetime as _dt
-        stamped = [(j, _started(j)) for j in done]
+    stamped = [(j, _started(j)) for j in done]
+    undated = [j for j, t in stamped if t is None]
+
+    if args.all_runs:
+        kept = stamped
+    elif args.since:
+        try:
+            cutoff = _dt.datetime.fromisoformat(args.since)
+        except ValueError:
+            raise SystemExit(f"--since: could not parse {args.since!r}; use YYYY-MM-DD")
+        if cutoff.tzinfo is None:                      # AML stamps are tz-aware UTC
+            cutoff = cutoff.replace(tzinfo=_dt.timezone.utc)
+        kept = [(j, t) for j, t in stamped if t and t >= cutoff]
+        print(f"[filter] keeping jobs created on or after {cutoff:%Y-%m-%d %H:%M %Z}")
+    elif args.since_hours:
         known = [t for _, t in stamped if t]
         if known:
             newest = max(known)
             cutoff = newest - _dt.timedelta(hours=args.since_hours)
-            kept = [j for j, t in stamped if t and t >= cutoff]
-            dropped = len(done) - len(kept)
-            if dropped:
-                print(f"[filter] newest job at {newest:%Y-%m-%d %H:%M}; keeping the "
-                      f"{len(kept)} job(s) within {args.since_hours}h of it, "
-                      f"skipping {dropped} older one(s).")
-                print("         (use --all-runs to merge every run -- note that "
-                      "identical filenames will overwrite each other)")
-            done = kept
+            kept = [(j, t) for j, t in stamped if t and t >= cutoff]
+            print(f"[filter] newest job at {newest:%Y-%m-%d %H:%M}; keeping jobs "
+                  f"within {args.since_hours}h of it")
         else:
-            print("[filter] job timestamps unavailable; fetching all runs")
+            kept = stamped
+    else:
+        kept = stamped
+        print("[filter] no date filter -- fetching every completed job. "
+              "Pass --since YYYY-MM-DD if this experiment has been run more than once.")
 
-    print(f"{len(done)} completed jobs in '{args.experiment}'")
+    dropped = len(stamped) - len(kept)
+    if dropped:
+        print(f"         skipped {dropped} older job(s); use --all-runs to include them")
+    if undated and not args.all_runs and (args.since or args.since_hours):
+        print(f"         note: {len(undated)} job(s) had no readable timestamp and were skipped")
+
+    # oldest first => later writes win, so a re-run supersedes the run before it
+    kept.sort(key=lambda jt: jt[1] or _dt.datetime.min.replace(tzinfo=_dt.timezone.utc))
+    done = [j for j, _ in kept]
+    job_time = {j.name: t for j, t in kept}
+    if kept:
+        lo, hi = kept[0][1], kept[-1][1]
+        print(f"{len(done)} completed jobs in '{args.experiment}'"
+              + (f"  ({lo:%Y-%m-%d %H:%M} .. {hi:%Y-%m-%d %H:%M} UTC)" if lo and hi else ""))
+    else:
+        raise SystemExit("no jobs matched the filter - widen --since or use --all-runs")
     os.makedirs(args.out, exist_ok=True)
 
     total = 0
+    total_collisions = []
+    owner = {}                      # basename -> job that wrote it, for collision reporting
     for j in done:
         # job artifacts live under ExperimentRun/dcid.<job>/ (outputs/, user_logs/, ...)
         prefix = f"ExperimentRun/dcid.{j.name}/"
@@ -101,25 +135,37 @@ def main(argv=None):
         gotf = 0
         for blob in cc.list_blobs(name_starts_with=prefix):
             base = os.path.basename(blob.name)
-            if base.endswith(".json") and (
-                    (base.startswith("paper_") and "_sub_" in base)
-                    or base.startswith(("darcy_", "modes_", "speedup_",
-                                        "scaling_", "discretization_",
-                                        "symplectic_defect_", "longhorizon_",
-                                        "best_width_"))):
-                data = cc.download_blob(blob.name).readall()
-                with open(os.path.join(args.out, base), "wb") as fh:
-                    fh.write(data)
+            is_json = base.endswith(".json") and (
+                (base.startswith("paper_") and "_sub_" in base)
+                or base.startswith(("darcy_", "modes_", "speedup_",
+                                    "scaling_", "discretization_",
+                                    "symplectic_defect_", "longhorizon_",
+                                    "best_width_")))
+            is_field = (args.with_fields and base.endswith(".npz")
+                        and base.startswith(("fields_", "lhfields_")))
+            if not (is_json or is_field):
+                continue
+            # jobs are processed oldest-first, so an unconditional write means the
+            # newest run wins any name collision
+            data = cc.download_blob(blob.name).readall()
+            with open(os.path.join(args.out, base), "wb") as fh:
+                fh.write(data)
+            if base in owner and owner[base] != j.name:
+                total_collisions.append(base)
+            owner[base] = j.name
+            if is_json:
                 got += 1
                 total += 1
-            elif args.with_fields and base.startswith(("fields_", "lhfields_")) and base.endswith(".npz"):
-                dst = os.path.join(args.out, base)
-                if not os.path.exists(dst):  # one file per (problem,config); first job wins
-                    data = cc.download_blob(blob.name).readall()
-                    with open(dst, "wb") as fh:
-                        fh.write(data)
-                    gotf += 1
-        print(f"  {j.name}: {got} json(s)" + (f", {gotf} field(s)" if args.with_fields else ""))
+            else:
+                gotf += 1
+        stamp = job_time.get(j.name)
+        print(f"  {j.name}: {got} json(s)" + (f", {gotf} field(s)" if args.with_fields else "")
+              + (f"   [{stamp:%m-%d %H:%M}]" if stamp else ""))
+
+    if total_collisions:
+        uniq = sorted(set(total_collisions))
+        print(f"\n[note] {len(uniq)} artefact name(s) were produced by more than one job "
+              f"in this window; the newest job's copy was kept. e.g. {uniq[:3]}")
 
     jsons = (glob.glob(os.path.join(args.out, "paper_*_sub_*.json"))
              + glob.glob(os.path.join(args.out, "darcy_*.json"))
@@ -144,14 +190,19 @@ def main(argv=None):
           f"  python -m track2.seed_analysis --results-dir track2/{args.out}")
 
     if args.with_fields:
-        npzs = glob.glob(os.path.join(args.out, "fields_*.npz"))
+        npzs = (glob.glob(os.path.join(args.out, "fields_*.npz"))
+                + glob.glob(os.path.join(args.out, "lhfields_*.npz")))
         fzip = args.out + "_fields.zip"
         with zipfile.ZipFile(fzip, "w", zipfile.ZIP_STORED) as z:  # npz already compressed
             for f in npzs:
                 z.write(f, os.path.join(os.path.basename(args.out), os.path.basename(f)))
-        print(f"wrote {fzip} ({os.path.getsize(fzip) // (1024 * 1024)} MB, {len(npzs)} field files)"
+        mb = os.path.getsize(fzip) / (1024 * 1024)
+        print(f"wrote {fzip} ({mb:.0f} MB, {len(npzs)} field files)"
               f" -> download via Jupyter, unzip into track2/{args.out}/, then locally:\n"
-              f"  python -m track2.paper_analysis --results-dir track2/{args.out} --only pred")
+              f"  python -m track2.make_field_figs   # rebuilds the paper's field panels")
+        print("\n[!] verify the download before trusting it -- a truncated transfer looks\n"
+              "    like a valid file until you open it:\n"
+              f"      python -c \"import zipfile;print(len(zipfile.ZipFile('{os.path.basename(fzip)}').namelist()),'entries')\"")
 
 
 if __name__ == "__main__":
