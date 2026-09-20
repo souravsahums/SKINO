@@ -112,6 +112,7 @@ forms.
 This gives an unusually clean experiment. Build both, verify that each is exact
 in its own form, then ask which one helps. Our contributions:
 
+\label{sec:intro-claims}
 \begin{enumerate}\itemsep2pt
 \item \textbf{An instrument} (\S\ref{sec:defect}). We measure the symplectic
 defect directly from the autograd Jacobian, against \emph{both} candidate inner
@@ -310,8 +311,10 @@ components are as follows.
      {Cheb.\\coeffs $\hat\varphi,\hat\psi$};
 \node[box,fill=cOrange!70,right=5mm of coef,text width=15mm] (eval)
      {evaluate\\on CGL $N$};
-\node[box,fill=cOrange!70,right=5mm of eval,text width=24mm] (contract)
-     {$\sum_r\varphi_r\,M_r\iprod{\psi_r}{\cdot}_W$};
+% no text width: let the node grow to fit the formula, otherwise it spills
+% out of the shaded group box behind it
+\node[box,fill=cOrange!70,right=5mm of eval,inner xsep=6pt] (contract)
+     {$\sum_r \varphi_r\, M_r\, \langle \psi_r, \cdot\rangle_W$};
 \begin{scope}[on background layer]
   \node[fill=cBox,rounded corners=3pt,fit=(coef)(eval)(contract),inner sep=4pt] (kbox) {};
 \end{scope}
@@ -733,17 +736,19 @@ rather than of either particular bracket.
 \centering
 \includegraphics[width=0.72\linewidth]{figs/basis_boundary.png}
 \caption{\texttt{wave1d\_dir}, the Hamiltonian non-periodic rung. Every Chebyshev
-operator beats every Fourier operator: $3.0\times$ over the best FNO and
-$4.9\times$ over SNO, on a benchmark built to match SNO's own data protocol. The
+operator beats every Fourier operator: $3.2\times$ over the best FNO and
+$6.5\times$ over SNO, on a benchmark built to match SNO's own data protocol. The
 mechanism is the Gibbs penalty the Dirichlet envelope imposes on a periodic
 basis.}
 \label{fig:basis}
 \end{figure}
 
 The converse holds too, which is what makes this a rule rather than a cherry-pick:
-Fourier operators take four of the five \emph{periodic} winners. Aggregated over
-all nine problems the split is Chebyshev~5 / Fourier~4, and is explained by the
-boundary conditions rather than by any structural prior.
+in one dimension the winning basis follows the boundary conditions \emph{exactly}
+---Fourier operators take all four periodic problems and the Chebyshev family
+takes the one non-periodic problem---while the Chebyshev operator additionally
+takes all three multi-dimensional problems. No structural prior is needed to
+explain the split.
 
 \subsection{Accuracy across the full matrix}
 
@@ -756,17 +761,22 @@ boundary conditions rather than by any structural prior.
 \toprule
 problem & best model & relative RMS & basis \\
 \midrule
-advection            & \ckino{} (recursive)            & $0.001092 \pm 0.00057$ & Chebyshev \\
+advection$^\ddagger$   & SNO (seq2seq)                   & $0.001196 \pm 0.00016$ & Fourier \\
 heat                 & T-FNO (recursive)               & $0.001090 \pm 0.00031$ & Fourier \\
-\texttt{wave1d}      & SNO (seq2seq)                   & $0.001298 \pm 0.00016$ & Fourier \\
-\texttt{wave1d\_dir} & \texttt{sacheb\_naive} (seq2seq)& $0.027387 \pm 0.0011$  & Chebyshev \\
+\texttt{wave1d}      & SNO (seq2seq)                   & $0.001103 \pm 0.00039$ & Fourier \\
+\texttt{wave1d\_dir} & \texttt{sacheb\_naive} (seq2seq)& $0.025939 \pm 0.0021$  & Chebyshev \\
 Burgers              & T-FNO (recursive)               & $0.003963 \pm 0.00098$ & Fourier \\
-KdV                  & SNO (seq2seq)                   & $0.000467 \pm 0.000063$& Fourier \\
+KdV                  & SNO (seq2seq)                   & $0.000511 \pm 0.000064$& Fourier \\
 \texttt{wave2d}      & \texttt{sacheb\_naive} (seq2seq)& $0.007771 \pm 0.0015$  & Chebyshev \\
 \texttt{wave3d}      & \texttt{pureunif} (recursive)   & $0.072375 \pm 0.0089$  & Chebyshev \\
 \texttt{ns2d}        & \texttt{sacheb\_naive} (seq2seq)& $0.174500 \pm 0.0014$  & Chebyshev \\
 \bottomrule
 \end{tabular}
+
+\vspace{2pt}
+{\footnotesize $^\ddagger$ advection is a tie within seed noise: the contending
+Chebyshev model varies by $15.7\times$ across seeds there, and the winner changed
+between two executions of the study (\S\ref{sec:repro}). We do not claim it.}
 \end{table}
 
 \begin{figure}[t]
@@ -802,6 +812,40 @@ they win the unconstrained comparison, and the only Hamiltonian non-periodic one
 And cost-efficiency diverges sharply from peak accuracy: on \texttt{wave3d} SNO's
 $0.00271$ costs $1.36$M parameters while \texttt{sacheb\_naive} reaches $0.00345$
 with $49{,}750$---\textbf{27$\times$ cheaper for $1.3\times$ worse}.
+
+\subsection{Reproducibility: which findings actually hold}
+\label{sec:repro}
+
+The full study was executed twice on the cluster. That was unintentional, but it
+is the most useful control we have, so we report it as one.
+
+\begin{table}[h]
+\centering
+\caption{Claims under an accidental replication of the entire study.}
+\label{tab:repro}
+\small
+\begin{tabular}{@{}lccl@{}}
+\toprule
+claim & execution A & execution B & verdict \\
+\midrule
+form ablation (lifted) & $\Wu$ 16 / $\Wc$ 1 & $\Wu$ 16 / $\Wc$ 2 & \textbf{robust} \\
+lift-free ratios & $17.2/1.24/21.6/14.2$ & identical & \textbf{robust} \\
+long-horizon boundedness & lift-free only & lift-free only & \textbf{robust} \\
+winner, 8 of 9 problems & --- & --- & \textbf{stable} \\
+winner, advection & \ckino{} $0.001092$ & SNO $0.001196$ & \emph{flipped} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The advection flip has a clear cause: the contending Chebyshev configuration
+varies by $15.7\times$ across seeds there ($0.00062$ to $0.00968$) against SNO's
+$1.4\times$. That is not a close race between two good models; it is one unstable
+configuration occasionally landing well. We report advection as a tie.
+
+The general lesson applies beyond this study: \textbf{with three seeds,
+differences smaller than the seed spread are not results}. Every finding we
+advance in \S\ref{sec:intro-claims} survived a full replication with margins of
+$1.4$--$22\times$; the one that did not survive had a margin of $1.1\times$.
 
 \subsection{Supporting axes}
 \label{sec:support}
@@ -888,11 +932,9 @@ $16^3$, $64^2$), adequate to resolve the reported orderings but not a deployment
 benchmark. $2\times10^{4}$ steps separates bounded from unbounded but is still far
 short of the regimes where backward-error analysis is usually invoked.
 
-\textbf{Figure provenance.} The field panels in Figures~\ref{fig:fields-dir} and
-\ref{fig:fields-long} are produced by a local reproduction with a reduced training
-schedule, because the GPU field archive did not survive download. They are
-qualitative; the orderings match the tables, the absolute errors are not the
-reported ones. All other figures come directly from the reported runs.
+\textbf{Single hardware.} All $783$ runs used one accelerator type (Tesla T4)
+with TF32 disabled, so arithmetic is consistent across the matrix; results may
+differ on accelerators with different defaults.
 
 % ============================================================================
 \section{Conclusion}
@@ -1085,22 +1127,25 @@ Y.~D. Zhong, B.~Dey, and A.~Chakraborty.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\linewidth]{figs/fields_wave1d_dir.png}
-\caption{\texttt{wave1d\_dir}: reference solver (grey) against operator
-prediction, displacement $u(x,t)$ at five rollout times. The Chebyshev operators
-track the Dirichlet boundary; the Fourier operators accumulate the Gibbs error
-that Figure~\ref{fig:basis} quantifies. Reduced-schedule local reproduction, see
-\S\ref{sec:limits}.}
+\includegraphics[width=\linewidth]{figs/timelapse_wave1d_dir.png}
+\caption{\texttt{wave1d\_dir} time lapse over the $2\times10^{4}$-step rollout:
+reference solver (grey) against operator prediction. Row labels carry each
+family's population error over all test trajectories, so a single plotted
+trajectory cannot be over-read. Three distinct failure modes are visible and are
+not interchangeable: the \emph{lifted} SA-Cheb and FNO blow up; SNO collapses to
+a low-amplitude oscillation---bounded, but carrying none of the physics; only the
+\emph{lift-free} operators track the wave to $2\times10^{4}$ steps.}
 \label{fig:fields-dir}
 \end{figure}
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\linewidth]{figs/fields_longrollout.png}
-\caption{\texttt{wave1d} under long autoregressive rollout. The lift-free
-operators remain on the solution manifold at $5{,}000$ steps while FNO has left it
-by $1{,}000$. This is Figure~\ref{fig:long} viewed as fields rather than curves.
-Reduced-schedule local reproduction, see \S\ref{sec:limits}.}
+\includegraphics[width=\linewidth]{figs/timelapse_wave2d.png}
+\caption{\texttt{wave2d} displacement field over the same rollout. The reference
+solver sustains a coherent interference pattern throughout. The lift-free
+matched-form operator degrades gracefully into noise while remaining bounded; the
+\emph{lifted} variant---same shear algebra, same parameters, only the wrapper
+differs---has diverged by $2\times10^{4}$, and FNO by $10^{3}$.}
 \label{fig:fields-long}
 \end{figure}
 

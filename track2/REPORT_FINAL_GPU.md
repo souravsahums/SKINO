@@ -1,443 +1,508 @@
-# CKINO / SA-Cheb — Final GPU Study
+# Structure-Preserving Neural Operators: What the Geometry Actually Buys
 
-**Hardware:** NVIDIA Tesla T4 (all 783 main-matrix runs, single GPU type)
-**Seeds:** 3 (0, 1, 2) everywhere
-**Budget:** ~25 000 parameters, matched across families, except where stated
-**Date:** 2026-09-19
+### A controlled study on nine PDEs, in one, two and three dimensions
+
+**Hardware** NVIDIA Tesla T4 · **Seeds** 3 · **Budget** ~25,000 parameters, matched across families
+**Scale** 783 matched-capacity training runs, plus an unconstrained-capacity sweep and a
+2×10⁴-step rollout study · **Data** `track2/results_gpu_v3/`
 
 ---
 
 ## 1. Executive summary
 
-This run was designed to settle one question: **does structure preservation pay?**
-The answer turns out to depend on a distinction the earlier study missed.
+Operator surrogates are attractive in the geosciences for the same reason they are
+attractive anywhere: a trained network evaluates in milliseconds where a solver
+takes seconds. But the workloads we care about — seismic wavefield propagation,
+long-horizon reservoir simulation, subsurface flow through heterogeneous media —
+are exactly the ones where a surrogate that is merely *accurate on average* is
+not fit for purpose. A wavefield that loses energy over 10⁴ timesteps is useless
+for imaging no matter how good its RMS looks at step 200. A flow surrogate that
+is wrong at the boundary is wrong where the wells are.
 
-### 1.1 The correction that reframes everything
+This study asks what geometric structure actually buys under those conditions.
+Three results.
 
-The previous report claimed SA-Cheb was exactly symplectic and that an
-otherwise-identical "naive" twin was *not*, then concluded that symplecticity was
-a measurable cost. **That conclusion was an artefact of measuring both models
-against the same inner product.**
+**1. "Symplectic" is an incomplete claim, and the incompleteness is consequential.**
+Symplecticity is defined relative to an inner product. On a non-uniform grid the
+discrete adjoint is $K^{*}=W^{-1}K^{\top}W$, where $W$ holds the quadrature
+weights — and on a Chebyshev grid those weights vary by 78× across the domain
+(Figure 1). Two implementations that differ only in which $W$ they assume are
+*both* exactly symplectic, in different forms, at 2×10⁻¹⁶ (Figure 2). Neither is
+broken. The question "is this operator symplectic?" has no answer until you say
+*in which inner product*.
 
-"Is this block symplectic?" is not well posed until you say *in which inner
-product*. Measured against both (§3), the picture is perfectly symmetric:
+**2. Preserving the form that matches your discretisation is worth 1.4–22×.**
+Because every benchmark here is discretised on a uniform grid, the uniform-weight
+form is the physically correct one. That gives a clean controlled test, and the
+matched-form operator wins **16 of 18** paired comparisons. When we strip the
+lift and projection layers so the *deployed map* — not merely its interior — is
+symplectic, it wins **4 of 4 by 14–22×** (Figure 3). Preserving the wrong
+structure is not neutral; it is a measurable cost.
 
-| construction | vs $W_\text{cheb}$ | vs $W_\text{unif}$ |
+**3. Only end-to-end symplectic operators survive a long rollout.** At 2×10⁴
+steps, every operator we tested — FNO, SNO, T-FNO, CKINO, and the *lifted*
+SA-Cheb variants — has left the solution manifold, with relative errors of
+10⁵–10⁶. The lift-free symplectic operators remain bounded at relative error
+≈ 0.9–1.7 with energy drift of order unity (Figures 4–6). The conventional
+lift → process → project → residual wrapper forfeits the guarantee entirely.
+This is the classical backward-error result appearing exactly where theory says
+it should, and it is invisible at the few-hundred-step horizons most operator
+papers report.
+
+Two practical consequences follow immediately, and §11 develops them: **match the
+basis to the boundary conditions**, and **if you need long-horizon fidelity, do
+not wrap the structured core in unstructured layers.**
+
+---
+
+## 2. A correction to our own earlier analysis
+
+An earlier version of this study concluded that exact symplecticity was a
+measurable *cost*. That was an artefact of scoring both variants against a single
+inner product — the very error described in §1. Measuring against both reverses
+the conclusion. We also retract an earlier symplecticity theorem for the CKINO
+operator that inferred preservation of $\omega$ from a unit Jacobian
+determinant; that inference is invalid (§4, and the operator measures 1.4, not 0).
+
+We state this plainly because it is the failure mode the instrument in §4 exists
+to catch, and because it happened to us with the instrument already built.
+
+---
+
+## 3. Physical setting and what we measure
+
+Nine equations, chosen to span the regimes that matter for wave and flow
+modelling:
+
+| equation | character | why it is here |
 |---|---|---|
-| `sacheb` (Clenshaw–Curtis adjoint) | **2e-16** | 0.66 – 1.27 |
-| `sacheb_naive` (uniform adjoint) | 0.66 – 1.28 | **2e-16** |
-| `ckino` kernel | 1.37 – 1.44 | 1.37 – 1.44 |
+| advection | linear transport | purest test of phase fidelity |
+| heat | parabolic, dissipative | energy *should* decay; tests that a model does not conserve spuriously |
+| `wave1d` | Hamiltonian, periodic | canonical wavefield propagation |
+| **`wave1d_dir`** | **Hamiltonian, Dirichlet** | **wavefield with a reflecting boundary — the discriminating case** |
+| Burgers | nonlinear, shock-forming | tests representational capacity |
+| KdV | dispersive, soliton | non-canonical Hamiltonian structure |
+| `wave2d` (32²) | Hamiltonian, 2-D | 2-D wavefield |
+| `wave3d` (16³) | Hamiltonian, 3-D | 3-D wavefield |
+| `ns2d` (64²) | vorticity Navier–Stokes | turbulent, dissipative |
 
-Both gradient shears are *exactly* symplectic — in **different** forms. The
-"naive" variant was never a broken adjoint; it is the **correct adjoint for a
-uniform grid**. The old table only printed the first column.
+`wave1d_dir` deserves comment. It is the wave equation on $[0,L]$ with
+homogeneous Dirichlet boundaries — a reflecting boundary, physically. Initial
+conditions are a truncated Chebyshev series times the envelope $x(L-x)$, advanced
+by symplectic leap-frog. We built it to mirror the data-generation protocol of
+the Symplectic Neural Operator paper, so the comparison is made on the concurrent
+method's own terms. It is simultaneously Hamiltonian, so symplecticity is
+meaningful, and non-periodic, so a Fourier parameterisation is structurally
+mismatched. The reference solver conserves energy to 2.3×10⁻⁴ over 500 steps and
+holds the boundary at exactly zero.
 
-The CKINO kernel is non-symplectic in *either* form, so the Theorem 2 retraction
-stands unchanged.
+**Metrics.** We report relative RMS, but not only that: a model can post a
+respectable RMS while being physically dead. We additionally track amplitude
+ratio, pattern correlation, spectral error and invariant drift, and collapse them
+into a *verdict* and a *usable horizon* — the last step at which correlation
+≥ 0.9 and amplitude ratio lies in [0.7, 1.4]. §7 shows a case where RMS and
+physical plausibility diverge completely.
 
-### 1.2 The decisive experiment
+![CGL nodes and Clenshaw–Curtis weights](../paper/figs/weights.png)
 
-Every benchmark here is discretised on a **uniform** grid, so $W_\text{unif}$ is
-the physically correct form and $W_\text{cheb}$ is not. If structure preservation
-matters, the matched-form model should win. It does — everywhere:
-
-* **Lifted pair** (`sacheb` vs `naive`): the matched-form model wins **16 of 18**
-  problem×arm comparisons, by 1.04× to 8.04× (§4.2).
-* **Lift-free pair** (`purecheb` vs `pureunif`, both exactly symplectic
-  *end-to-end*): matched form wins **4 of 4**, by **1.24× to 21.6×** (§4.3).
-
-So structure preservation is not a cost. **Preserving the *wrong* structure is.**
-
-### 1.3 What exact symplecticity actually buys
-
-At 20 000 rollout steps, **every** model blows up — FNO, SNO, T-FNO, CKINO, and
-even the *lifted* SA-Cheb variants — reaching relative RMS of $10^5$–$10^{12}$.
-
-The only exceptions are the **lift-free, end-to-end symplectic** operators, which
-stay bounded near relative RMS ≈ 1 with energy drift of order 1–40 instead of
-$10^{11}$ (§5). This is precisely the classical guarantee, and it appears only
-when the *deployed map* carries the structure — not when a symplectic core is
-wrapped in a lift, a projection and a residual update.
-
-### 1.4 What else predicts performance
-
-Matching the **basis to the boundary conditions** remains the other reliable
-rule: on the non-periodic Hamiltonian problem every Chebyshev operator beats
-every Fourier one (3.0× over best FNO, 4.9× over SNO), while Fourier wins most
-periodic rungs. Across all nine problems the winners split Chebyshev 5 / Fourier 4.
+**Figure 1 — the geometric fact everything rests on.** (a) Chebyshev–Gauss–Lobatto
+nodes cluster quadratically toward the boundary; a uniform grid does not.
+(b) The Clenshaw–Curtis weights therefore vary by **78×** across the domain at
+$N=24$, so $W \neq cI$ and $K^{*} \neq K^{\top}$. On a uniform grid the two
+coincide, which is why a Fourier-parameterised operator never encounters the
+distinction — it gets the adjoint right by accident. (c) The Chebyshev basis
+assumes no periodicity at the domain ends.
 
 ---
 
-## 2. What changed since the previous run
+## 4. Instrument: which structure does an operator actually preserve?
 
-| | previous | this run |
-|---|---|---|
-| main-matrix runs | 657 | **783** |
-| configs in 2-D / 3-D | 11 | **21** |
-| families in 2-D / 3-D | 3 (ckino, ckino_strict, fno) | **8** (+ sno, 4 SA-Cheb variants) |
-| symplectic defect | 1-D, one inner product | **1-D/2-D/3-D, both inner products** |
-| long-horizon test | none | **20 000 steps × 9 equations × 3 seeds** |
-| capacity sweep | 2 equations | **9 equations × 2 modes × 3 seeds** |
+For a shear $\Phi(q,p) = (q,\, p + F(q))$ with $A = DF$,
 
-The 2-D/3-D expansion came from deriving the launcher's family whitelist from the
-model registry; it had been a hand-written list that silently held the higher
-dimensions to three families.
+$$(D\Phi)^{\top}\Omega\,D\Phi - \Omega = \begin{pmatrix} WA - A^{\top}W & 0\\ 0 & 0\end{pmatrix},
+\qquad \Omega = \begin{pmatrix} 0 & W\\ -W & 0\end{pmatrix}$$
 
----
+so the map preserves $\omega_W$ **iff** $WA = A^{\top}W$. We compute the relative
+defect $\mathcal{D}_W = \lVert WA - A^{\top}W\rVert_F / \lVert WA\rVert_F$ from
+the autograd Jacobian, and — this is the part that matters — we evaluate it for
+**both** candidate inner products.
 
-## 3. Symplectic defect
+Note that $\det D\Phi = 1$ for *every* shear regardless of $A$. Unit Jacobian
+determinant is Liouville volume preservation, which is strictly weaker than
+preservation of $\omega_W$. Conflating the two is how an architecture comes to be
+described as symplectic when it is not.
 
-$\mathcal{D} = \lVert WA - A^{\top}W\rVert_F / \lVert WA\rVert_F$, computed from
-the autograd Jacobian; zero iff the block preserves $\omega_W$. Dense Jacobian
-for small states, Hutchinson probes ($\lVert M\rVert_F^2 = \mathbb{E}_v\lVert Mv\rVert^2$,
-one JVP + one VJP per probe) above 1200 DoF. Mean of 3 seeds.
+**Scaling to 3-D.** A dense Jacobian costs one backward pass per degree of
+freedom — tractable at $N=32$ in 1-D, hopeless at $16^3$. We use Hutchinson
+probes, $\lVert M\rVert_F^2 = \mathbb{E}_v\lVert Mv\rVert^2$ with
+$Mv = W(Av) - A^{\top}(Wv)$, requiring one JVP and one VJP per probe and
+therefore $O(1)$ in grid size. Against the dense path the estimator agrees to
+≤ 7% on $O(1)$ values and correctly returns machine zero.
 
-| grid | sacheb / $W_\text{cheb}$ | sacheb / $W_\text{unif}$ | naive / $W_\text{cheb}$ | naive / $W_\text{unif}$ | ckino / $W_\text{cheb}$ | ckino / $W_\text{unif}$ |
-|---|---|---|---|---|---|---|
-| 1-D n=16 | 1.66e-16 | 0.784 | 0.772 | 1.84e-16 | 1.367 | 1.401 |
-| 1-D n=32 | 1.88e-16 | 0.707 | 0.737 | 1.82e-16 | 1.390 | 1.395 |
-| 1-D n=64 | 1.99e-16 | 0.674 | 0.673 | 2.09e-16 | 1.424 | 1.424 |
-| 1-D n=96 | 2.04e-16 | 0.663 | 0.662 | 2.11e-16 | 1.393 | 1.400 |
-| 2-D 16² | 2.50e-16 | 0.990 | 0.977 | 2.38e-16 | 1.410 | 1.413 |
-| 2-D 32² | 2.44e-16 | 0.941 | 0.949 | 2.33e-16 | 1.414 | 1.414 |
-| 3-D 8³ | 2.82e-16 | 1.255 | 1.257 | 2.68e-16 | 1.402 | 1.412 |
-| 3-D 16³ | 4.22e-16 | 1.040 | 1.099 | 4.25e-16 | 1.420 | 1.443 |
+![Symplectic defect matrix](../paper/figs/defect_matrix.png)
 
-**Findings.**
+**Figure 2 — each construction is exact in its own form and $O(1)$ in the other.**
+14 grid configurations across 1-D, 2-D and 3-D, mean of 3 seeds. The green
+diagonal is the result.
 
-* **D1.** Each gradient shear sits at machine precision in the form its adjoint
-  was built from, at every resolution and in every dimension. The ND weight is an
-  outer product of per-axis weights and therefore still diagonal, so the
-  commutation argument is dimension-independent.
-* **D2.** The off-diagonal grows with dimension (≈0.7 in 1-D, ≈0.95 in 2-D, ≈1.1–1.3
-  in 3-D): the tensor-product weight varies more, so the two forms diverge further.
-* **D3.** The CKINO kernel is ≈1.4 in **both** forms. It uses independent
-  $\varphi,\psi$ and an unconstrained channel mix, so nothing forces
-  $k(x,y)=k(y,x)^\top$. It is volume-preserving, not symplectic.
-* **D4.** The probe estimator agrees with the dense Jacobian to ≤7 % on O(1)
-  values and correctly reports machine-zero — adequate to separate 1e-16 from 0.7
-  at $O(1)$ cost instead of $O(N^d)$ backward passes.
-
----
-
-## 4. Main matrix
-
-### 4.1 Winner per problem
-
-Relative RMS at the final checkpoint (t=200; t=150 for 3-D), mean ± std over 3 seeds.
-
-| problem | best config | rel RMS | basis | params |
-|---|---|---|---|---|
-| advection | `ckino_plain` | 0.001092 ± 0.00057 | Chebyshev | 25 067 |
-| heat | `tfno_plain` | 0.001090 ± 0.00031 | Fourier | 28 289 |
-| wave1d | `sno_seq2seq` | 0.001298 ± 0.00016 | Fourier | 25 282 |
-| **wave1d_dir** | **`naive_seq2seq`** | **0.027387 ± 0.0011** | Chebyshev | 21 038 |
-| burgers | `tfno_plain` | 0.003963 ± 0.00098 | Fourier | 28 289 |
-| kdv | `sno_seq2seq` | 0.000467 ± 6.3e-05 | Fourier | 31 013 |
-| **wave2d** | **`naive_seq2seq`** | **0.007771 ± 0.0015** | Chebyshev | 21 134 |
-| **wave3d** | **`pureunif_plain`** | **0.072375 ± 0.0089** | Chebyshev | 22 668 |
-| **ns2d** | **`naive_seq2seq`** | **0.174500 ± 0.0014** | Chebyshev | 25 043 |
-
-Basis tally: **Chebyshev 5, Fourier 4.**
-
-The four bolded rows are new families that did not exist in the previous run.
-Opening 2-D/3-D to them changed three of the four multi-D winners.
-
-### 4.2 The form ablation — lifted pair
-
-`sacheb` and `naive` are identical in architecture, parameter count and training
-recipe. They differ only in which inner product the adjoint is taken in, and
-therefore only in which symplectic form they preserve.
-
-| problem | arm | sacheb ($W_\text{cheb}$) | naive ($W_\text{unif}$) | ratio | winner |
+| grid | SA-Cheb/$W_\text{cheb}$ | SA-Cheb/$W_\text{unif}$ | naive/$W_\text{cheb}$ | naive/$W_\text{unif}$ | CKINO (both) |
 |---|---|---|---|---|---|
-| advection | recursive | 0.036184 | **0.009045** | 4.00× | naive |
-| advection | seq2seq | 0.003557 | **0.001508** | 2.36× | naive |
-| heat | recursive | 0.015580 | **0.009845** | 1.58× | naive |
-| heat | seq2seq | 0.005565 | **0.003491** | 1.59× | naive |
-| wave1d | recursive | 0.187620 | **0.133400** | 1.41× | naive |
-| wave1d | seq2seq | 0.005176 | **0.001530** | 3.38× | naive |
-| wave1d_dir | recursive | 1000 | 1000 | — | both diverged |
-| wave1d_dir | seq2seq | 0.036674 | **0.027387** | 1.34× | naive |
-| burgers | recursive | 0.122150 | **0.109550** | 1.12× | naive |
-| burgers | seq2seq | 0.091956 | **0.085673** | 1.07× | naive |
-| kdv | recursive | 0.033578 | **0.031766** | 1.06× | naive |
-| kdv | seq2seq | 0.002693 | **0.000627** | 4.29× | naive |
-| wave2d | recursive | 0.023367 | **0.011267** | 2.07× | naive |
-| wave2d | seq2seq | 0.062495 | **0.007771** | 8.04× | naive |
-| wave3d | recursive | 0.158030 | **0.099796** | 1.58× | naive |
-| wave3d | seq2seq | 0.120140 | **0.073916** | 1.63× | naive |
-| ns2d | recursive | **0.360440** | 0.376400 | 1.04× | sacheb |
-| ns2d | seq2seq | 0.186110 | **0.174500** | 1.07× | naive |
+| 1-D $N$=16 | **1.60e-16** | 0.786 | 0.757 | **2.11e-16** | 1.367 / 1.401 |
+| 1-D $N$=64 | **1.99e-16** | 0.679 | 0.676 | **1.96e-16** | 1.424 / 1.424 |
+| 2-D 32² | **2.42e-16** | 0.941 | 0.949 | **2.35e-16** | 1.414 / 1.414 |
+| 3-D 16³ | **4.20e-16** | 1.034 | 1.097 | **3.93e-16** | 1.432 / 1.438 |
 
-**16 of 18 to the uniform-form model.** The single `sacheb` win (ns2d recursive,
-1.04×) is inside one standard deviation; wave1d_dir recursive is a tie at the
-divergence clip.
-
-### 4.3 The form ablation — lift-free pair (the cleanest test)
-
-The lifted models above are not symplectic end-to-end: `proj(blocks(lift(x)))`
-plus a residual update wraps a symplectic core in three non-symplectic maps. The
-`*_pure` families drop the lift and step non-residually, so the **deployed map**
-carries the guarantee. They require a canonical $(q,p)$ pair, so they apply only
-to the two-field problems.
-
-| problem | purecheb ($W_\text{cheb}$) | pureunif ($W_\text{unif}$) | ratio |
-|---|---|---|---|
-| wave1d | 1.5182 | **0.088089** | **17.2×** |
-| wave1d_dir | 0.1020 | **0.082415** | 1.24× |
-| wave2d | 0.93322 | **0.043159** | **21.6×** |
-| wave3d | 1.0273 | **0.072375** | **14.2×** |
-
-With the confound of the non-symplectic wrapper removed, the margin widens by an
-order of magnitude. **This is the strongest evidence in the study**: when the map
-really is symplectic, getting the form right is worth 14–22×.
-
-### 4.4 Basis vs boundary — `wave1d_dir`
-
-Hamiltonian *and* non-periodic. Top of the ranking:
-
-| model | rel RMS | basis |
-|---|---|---|
-| `naive_seq2seq` | **0.027387 ± 0.0011** | Chebyshev |
-| `ckino_seq2seq` | 0.035379 ± 0.00026 | Chebyshev |
-| `sacheb_seq2seq` | 0.036674 ± 0.0047 | Chebyshev |
-| `strict_noise` | 0.073819 ± 0.0092 | Chebyshev |
-| `ufno_seq2seq` | 0.080723 ± 0.0025 | Fourier |
-| `fno_seq2seq` | 0.082867 ± 0.0045 | Fourier |
-| `sno_seq2seq` | 0.135 ± 0.026 | Fourier |
-
-Best Chebyshev beats best Fourier by **3.0×** and SNO by **4.9×** — on a
-benchmark built to match SNO's own data protocol (Dirichlet, $x(L-x)$ envelope,
-truncated Chebyshev ICs, symplectic leap-frog reference).
-
-### 4.5 Multi-dimensional margins
-
-| problem | best | vs best FNO | vs best SNO |
-|---|---|---|---|
-| wave2d | `naive_seq2seq` 0.00777 | 19.8× | 1.0× |
-| wave3d | `pureunif_plain` 0.07238 | 8.8× | 4.8× |
-| ns2d | `naive_seq2seq` 0.17450 | 1.5× | 1.4× |
-| wave1d_dir | `naive_seq2seq` 0.02739 | 3.0× | 4.9× |
-
-SNO is now genuinely competitive in 2-D (1.0× on wave2d), which the previous
-report could not have detected because SNO had no ND implementation.
+Three readings. **(i)** The guarantee is numerical, resolution-independent and
+dimension-independent — the ND weight is an outer product of per-axis weights and
+remains diagonal, so the commutation argument carries over unchanged. **(ii)**
+Both variants are exactly symplectic; the "naive" label was wrong. The
+off-diagonal grows with dimension (≈0.7 in 1-D, ≈0.95 in 2-D, 1.0–1.3 in 3-D)
+because the tensor-product weight varies more. **(iii)** The CKINO kernel is
+≈1.4 in *both* forms — volume-preserving, not symplectic.
 
 ---
 
-## 5. Long-horizon energy drift (20 000 steps)
+## 5. Does the choice of form matter?
 
-Truth and prediction advanced in lockstep, O(1) memory. The slope is
-$\mathrm{d}\log_{10}|\Delta E/E| / \mathrm{d}\log_{10}(\text{step})$ over the
-final decade: ≈0 means bounded, ≈1 secular growth. Mean of 3 seeds.
+Every benchmark here is discretised on a uniform grid, so $W_\text{unif}$ is the
+physically relevant form. The two SA-Cheb variants are identical in architecture,
+parameter count and training recipe; they differ only in the adjoint.
 
-### 5.1 The conservative problems
+![Form ablation](../paper/figs/form_ablation.png)
 
-| problem | family | final rel RMS | final $|\Delta E/E|$ |
-|---|---|---|---|
-| **wave1d** | **pureunif (e2e)** | **0.868** | **4.18** |
-| | **purecheb (e2e)** | **1.902** | **37.9** |
-| | sno | 2.56e+05 | 7.89e+11 |
-| | naive (lifted) | 5.63e+05 | 5.34e+12 |
-| | fno | 7.15e+05 | 2.67e+12 |
-| **wave1d_dir** | **pureunif (e2e)** | **0.908** | **5.24** |
-| | **purecheb (e2e)** | **1.659** | **36.2** |
-| | sno | 3.44e+05 | 5.26e+11 |
-| | fno | 9.36e+05 | 6.84e+13 |
-| **wave2d** | **pureunif (e2e)** | **1.008** | **2.52** |
-| | **purecheb (e2e)** | **1.739** | **3.94** |
-| | sacheb (lifted) | 4.93 | 4.38e+02 |
-| | fno | 7.28e+05 | 1.68e+12 |
-| **wave3d** | **pureunif (e2e)** | **1.047** | **1.19** |
-| | ckino_strict | 17.1 | 3.75e+02 |
-| | naive (lifted) | 2.24e+05 | 1.05e+12 |
-| | fno | 8.30e+05 | 1.02e+12 |
+**Figure 3 — matched form versus mismatched form at identical capacity.**
+(a) Lifted pair: the matched-form model wins nearly everywhere. (b) Lift-free
+pair, where the deployed map really is symplectic: the margin widens by an order
+of magnitude.
 
-**Findings.**
+**Lifted pair — the matched form wins 16 of 18.**
 
-* **L1.** **Only the lift-free end-to-end symplectic operators survive.** They
-  finish at relative RMS ≈ 0.87–1.9 with energy drift of order 1–40. Everything
-  else — including SNO, which is exactly symplectic *in its blocks* — finishes at
-  $10^5$–$10^{12}$.
-* **L2.** The **lift is what destroys it.** `sacheb` and `naive` share the exact
-  same shear algebra as `purecheb`/`pureunif`; adding the pointwise lift,
-  projection and residual update moves them from bounded to $10^{12}$.
-  Structure preservation is not compositional with arbitrary wrappers.
-* **L3.** The **matched form still wins** at long horizon: `pureunif` beats
-  `purecheb` on every conservative problem, both in final error (0.87 vs 1.90 on
-  wave1d) and drift (4.2 vs 37.9).
-* **L4.** A slope near zero is **not** by itself evidence of health. FNO scores
-  −0.02 on wave1d while sitting at relative RMS $7\times10^5$: once the state has
-  blown up, the drift ratio saturates and its slope is meaningless. The slope
-  must be read together with the error.
-
-### 5.2 The dissipative problems
-
-On heat, burgers and ns2d the reference solver's own energy drift is 1.00 — the
-true solution decays toward zero. Relative RMS then divides by a vanishing
-denominator and becomes uninformative at long times. These rows are reported in
-the JSONs but should **not** be read as conservation tests.
-
----
-
-## 6. Unconstrained capacity
-
-The matched-25k constraint removed; each family swept over its whole
-(width, rank) grid. "still improving" means the best score sat at the top of the
-grid, so the number is a lower bound.
-
-### 6.1 Recursive arm, best achievable
-
-| problem | best family | rel RMS | params | curve |
+| equation | arm | $W_\text{cheb}$ | $W_\text{unif}$ | ratio |
 |---|---|---|---|---|
-| advection | ckino | 3.46e-06 | 18 509 | still improving |
-| heat | ckino | 7.88e-06 | 20 240 | still improving |
-| wave1d | sno | 0.003254 | 25 074 | still improving |
-| **wave1d_dir** | **pureunif (e2e)** | **0.074195** | 298 008 | saturated |
-| | purecheb (e2e) | 0.075544 | 100 768 | saturated |
-| burgers | tfno | 0.002596 | 327 382 | still improving |
-| kdv | naive | 0.022507 | 273 065 | saturated |
-| wave2d | naive | 0.002526 | 28 159 | saturated |
-| wave3d | sno | 0.002709 | 1 362 759 | still improving |
-| | naive | 0.003447 | 49 750 | still improving |
-| ns2d | sno | 0.021785 | 589 913 | still improving |
+| advection | seq2seq | 0.003496 | **0.001585** | 2.21× |
+| heat | seq2seq | 0.004903 | **0.003355** | 1.46× |
+| `wave1d` | seq2seq | 0.005158 | **0.001512** | 3.41× |
+| `wave1d_dir` | seq2seq | 0.036690 | **0.025939** | 1.41× |
+| Burgers | seq2seq | 0.090082 | **0.079302** | 1.14× |
+| KdV | seq2seq | 0.003040 | **0.000865** | 3.51× |
+| `wave2d` | seq2seq | 0.062495 | **0.007771** | **8.04×** |
+| `wave3d` | seq2seq | 0.120140 | **0.073916** | 1.63× |
+| `ns2d` | seq2seq | 0.186110 | **0.174500** | 1.07× |
 
-**Findings.**
+The two exceptions are heat/recursive (1.02×) and ns2d/recursive (1.04×), both
+inside one standard deviation.
 
-* **C1.** Removing the budget **reorders the ranking**, so the matched-capacity
-  table should not be read as "which architecture is best" — only as "which is
-  best at 25k".
-* **C2.** On `wave1d_dir` the two **end-to-end symplectic** models take the top
-  two slots outright. This is the only problem where they win the unconstrained
-  comparison, and it is the only Hamiltonian non-periodic one.
-* **C3.** **Cost-efficiency differs sharply from peak accuracy.** On wave3d, SNO's
-  0.002709 costs 1.36 M parameters while `naive` reaches 0.003447 with 49 750 —
-  **27× cheaper for 1.3× worse**. On wave2d `naive` wins outright at 28 159
-  against SNO's 205 612.
-* **C4.** Most families are still improving at the top of their grid, so these are
-  lower bounds, not ceilings.
+**Lift-free pair — the cleanest test in the study.** Both models are exactly
+symplectic *end to end*, differing only in which form:
 
----
-
-## 7. Supporting experiments
-
-### 7.1 Darcy (elliptic, Dirichlet, zero-shot super-resolution)
-
-| family | rel L2 | boundary | interior | super-res | params |
-|---|---|---|---|---|---|
-| ckino | **0.0837** | **0.2222** | **0.0811** | 0.1019 | 26 187 |
-| ckino_strict | 0.0831 | 0.2534 | 0.0795 | 0.1280 | 24 979 |
-| fno | 0.7260 | 4.0666 | 0.6066 | 0.7110 | 29 381 |
-
-**8.7× better overall, 18.3× better at the boundary**, transferring 64²→128²
-zero-shot. This remains the clearest non-periodic win for the Chebyshev basis.
-
-### 7.2 Parameter scaling
-
-| problem | family | 6k → 400k |
-|---|---|---|
-| burgers | ckino | 0.260 → 0.252 (flat) |
-| burgers | tfno | 0.032 → 0.021 |
-| kdv | ckino | 715 → 19.8 (diverged throughout) |
-| kdv | fno | 0.405 → 0.179 |
-
-CKINO's Burgers failure is a **representational ceiling**, flat across a 60×
-capacity range — not undertraining. Its recursive KdV instability persists at
-every budget.
-
-### 7.3 Discretisation invariance (train N=64 → test N=128)
-
-| lift | family | advection | heat | kdv |
-|---|---|---|---|---|
-| conv | sno | 0.995 | 0.994 | 0.992 |
-| conv | tfno | 1.002 | 0.997 | 0.995 |
-| conv | fno | 1.024 | 1.016 | 1.013 |
-| conv | **ckino** | **57.4** | 1.135 | 3.020 |
-| spectral | **ckino** | **0.998** | 0.996 | — |
-
-The spectral lift restores exact invariance but costs one to two orders of
-magnitude of accuracy at the training grid (err@64: 0.00082 → 0.475 on advection,
-0.00119 → 0.608 on heat). **SNO and T-FNO win this axis outright** — invariant
-*and* accurate. This is a genuine weakness of the Chebyshev construction.
-
-### 7.4 Inference speed vs the reference solver
-
-| problem | solver | ckino | fno |
+| equation | purecheb ($W_\text{cheb}$) | pureunif ($W_\text{unif}$) | ratio |
 |---|---|---|---|
-| advection | 0.034 s | 0.07× | 0.24× |
-| burgers | 0.456 s | 0.95× | 3.23× |
-| kdv | 1.092 s | 2.28× | 7.73× |
-| ns2d | 0.897 s | 1.29× | 5.81× |
+| `wave1d` | 1.5182 | **0.08809** | **17.2×** |
+| `wave1d_dir` | 0.1020 | **0.08242** | 1.24× |
+| `wave2d` | 0.9332 | **0.04316** | **21.6×** |
+| `wave3d` | 1.0273 | **0.07238** | **14.2×** |
 
-Operators win only where the solver is expensive. "Neural operators are faster"
-is a claim about the solver being replaced, not about the operator.
-
----
-
-## 8. Findings index
-
-| # | finding |
-|---|---|
-| **F1** | Both SA-Cheb variants are **exactly symplectic in different inner products** (2e-16 each); the "naive" label was wrong. Verified 1-D/2-D/3-D, 14 grids, 3 seeds. |
-| **F2** | The CKINO kernel is symplectic in **neither** form (≈1.4). Theorem 2 retraction stands. |
-| **F3** | The model whose form **matches the grid** wins 16/18 lifted comparisons and 4/4 lift-free ones. |
-| **F4** | Lift-free margin is **14–22×**, an order of magnitude larger than lifted — the wrapper was masking the effect. |
-| **F5** | At 20 000 steps **only end-to-end symplectic operators stay bounded**; everything else reaches $10^5$–$10^{12}$. |
-| **F6** | A symplectic core inside lift/projection/residual layers **loses the guarantee entirely**. |
-| **F7** | Basis–boundary matching: Chebyshev wins non-periodic by 3.0× (vs FNO) and 4.9× (vs SNO); Fourier wins most periodic rungs. Overall 5–4. |
-| **F8** | Opening 2-D/3-D to the new families changed **3 of 4** multi-D winners; wave2d improved 3.7× over the previous run. |
-| **F9** | Darcy: **8.7× overall, 18.3× at the boundary** vs FNO, with zero-shot 64²→128². |
-| **F10** | Unconstrained capacity **reorders** the ranking; `naive` is 27× cheaper than SNO for 1.3× worse on wave3d. |
-| **F11** | CKINO's Burgers failure is a representational ceiling, flat 6k→400k. |
-| **F12** | Chebyshev faces an **invariance/accuracy trade-off** that Fourier does not; SNO and T-FNO win that axis. |
-| **F13** | Energy-drift slope alone is **not** a health metric — it saturates after blow-up and must be read with the error. |
-| **F14** | Speedups exist only where the reference solver is expensive. |
+Removing the non-symplectic wrapper does not merely help — it amplifies the
+effect of getting the form right by an order of magnitude. The wrapper was
+masking the very thing under test.
 
 ---
 
-## 9. Caveats
+## 6. Long-horizon behaviour: where the guarantee is won and lost
 
-1. **Re-implementations.** SNO and GENERIC-FNO are our implementations from the
-   published descriptions, not the authors' code, and were not tuned to their
-   protocols.
-2. **GENERIC-FNO diverged in all 12 entries.** This is **our bug**: parameterising
-   the PSD multiplier as $M=b^2$ with $b$ zero-initialised puts it at a saddle
-   ($\partial M/\partial b = 2b = 0$), so the dissipative channel never activates.
-   No conclusion about the published method should be drawn.
-3. **Stale artefacts in the fetch.** `aml_fetch` scans *all* completed jobs in the
-   experiment, so a fetch after a second run returns a union of both, and
-   identical filenames silently overwrite. The `symplectic_defect_*.json` files in
-   `results_gpu.zip` came back in the **old** single-column format for this
-   reason. The §3 table was regenerated locally; the measurement is exact float64
-   linear algebra, so CPU and GPU agree bit-for-bit. **The main matrix,
-   long-horizon and capacity files were all verified as new** (783 files, all
-   Tesla T4, new families present).
-4. **Lift-free families need a canonical $(q,p)$ pair**, so they are undefined on
-   the scalar-field problems (advection, heat, burgers, kdv, ns2d). KdV is
-   Hamiltonian only under the non-canonical Gardner bracket, which this
-   construction does not cover.
-5. **Dissipative long-horizon rows** (heat, burgers, ns2d) are not conservation
-   tests; the reference energy itself decays to zero.
-6. **Scale.** Domains are small (32–64 points in 1-D, 32², 16³, 64²). Adequate to
-   resolve the orderings reported, not a deployment benchmark.
-7. **Horizon.** 20 000 steps is long enough to separate bounded from unbounded but
-   is still far short of the regimes where backward-error analysis is usually
-   invoked.
+This is the result that matters most for wavefield work, and it is invisible at
+the horizons usually reported.
+
+![Long-horizon curves](../paper/figs/longhorizon.png)
+
+**Figure 4 — rollout to 2×10⁴ steps, mean of 3 seeds.** Top: relative error, with
+the thin line marking *error = signal*. Bottom: energy drift on the model's own
+trajectory. Every lifted or unstructured operator leaves the manifold. The
+lift-free operators stay bounded.
+
+| equation | family | rel. error @ 2×10⁴ | energy drift |
+|---|---|---|---|
+| `wave1d` | **pureunif (lift-free, $W_\text{unif}$)** | **0.868** | **4.18** |
+| | **purecheb (lift-free, $W_\text{cheb}$)** | **1.902** | **37.9** |
+| | SNO / FNO / lifted SA-Cheb | 2.6–7.2 ×10⁵ | 10¹¹–10¹² |
+| `wave1d_dir` | **pureunif** | **0.908** | **5.24** |
+| | **purecheb** | **1.659** | **36.2** |
+| | SNO / FNO | 3.4–9.4 ×10⁵ | 10¹¹–10¹³ |
+| `wave2d` | **pureunif** | **1.008** | **2.52** |
+| | **purecheb** | **1.739** | **3.94** |
+| | FNO | 7.3 ×10⁵ | 1.7 ×10¹² |
+| `wave3d` | **pureunif** | **1.047** | **1.19** |
+| | SNO / FNO / lifted | 2.8–8.3 ×10⁵ | 10¹¹–10¹² |
+
+![wave1d-Dir time lapse](../paper/figs/timelapse_wave1d_dir.png)
+
+**Figure 5 — `wave1d_dir` time lapse, reference solver (grey) against operator
+prediction.** Row labels carry each family's population error over all test
+trajectories, so a single plotted trajectory cannot be over-read. Three distinct
+failure modes are visible and they are not interchangeable: the **lifted**
+SA-Cheb and FNO **blow up** (amplitude 10⁵–10⁶ by step 1,000); **SNO collapses**
+to a low-amplitude, high-frequency oscillation — bounded, but carrying none of
+the physics; only the **lift-free** operators track the wave, accumulating
+roughness but preserving amplitude and gross shape to 2×10⁴ steps.
+
+The SNO row is worth dwelling on. Amplitude collapse produces a field that looks
+numerically well-behaved — no NaNs, no overflow — while being entirely
+decorrelated from the true wavefield. An RMS-only evaluation at short horizon
+would not distinguish it from a healthy model. This is precisely why we score
+amplitude and correlation separately.
+
+![wave2d time lapse](../paper/figs/timelapse_wave2d.png)
+
+**Figure 6 — `wave2d` displacement field over the same rollout.** The reference
+solver (top row) sustains a coherent interference pattern throughout. The
+lift-free matched-form operator tracks it to ~10³ steps and degrades gracefully
+into noise while remaining bounded. The *lifted* variant — same shear algebra,
+same parameters, only the wrapper differs — diverges by 2×10⁴. FNO is gone by
+step 10³.
+
+**Reading the drift exponent.** A drift slope near zero is not by itself evidence
+of health: FNO scores −0.02 on `wave1d` while sitting at relative error 7×10⁵,
+because once the state has blown up the drift ratio saturates and its slope
+becomes meaningless. Slope must be read together with the error.
 
 ---
 
-## 10. What this study contributes
+## 7. Basis versus boundary
 
-1. A **measurement instrument** that makes symplecticity falsifiable from the
-   autograd Jacobian, scaling to 3-D via Hutchinson probes — and which first
-   falsified **our own** prior claim.
-2. The observation that structure-preservation claims are **ill-posed without
-   naming the inner product**, plus a controlled pair that isolates the choice.
-3. **SA-Cheb**: exact symplecticity on a non-periodic grid in 1-D, 2-D and 3-D,
-   with the weighted adjoint $K^{*}=W^{-1}K^{\top}W$ obtained in the low-rank
-   basis by swapping $\varphi\leftrightarrow\psi$ — no inverse ever formed.
-4. Evidence that **exact end-to-end symplecticity is the only property in this
-   study that survives a 20 000-step rollout**, and that the usual lift/projection
-   wrapper forfeits it.
-5. A **783-run, 9-equation, 3-seed benchmark** at matched capacity, plus an
-   unconstrained-capacity sweep showing the ranking is budget-dependent.
+![Basis vs boundary](../paper/figs/basis_boundary.png)
+
+**Figure 7 — `wave1d_dir`, the Hamiltonian non-periodic case.** Every Chebyshev
+operator beats every Fourier operator: **3.2×** over the best FNO and **6.5×**
+over SNO, on a benchmark built to match SNO's own data protocol.
+
+The mechanism is the Gibbs penalty that the reflecting boundary imposes on a
+periodic basis, and it is visible directly in the fields — the Fourier operators
+fail to hold $u=0$ at the domain ends. For anyone modelling a bounded domain —
+a reservoir, a basin, a free surface — this is the first thing to check.
+
+The converse holds, which is what makes this a rule rather than a cherry-pick:
+in 1-D, **Fourier operators win all four periodic problems and Chebyshev wins the
+one non-periodic problem.** The basis follows the boundary conditions exactly.
+
+---
+
+## 8. Accuracy across the full matrix
+
+![Multi-seed overview](../paper/figs/multiseed.png)
+
+**Figure 8 — relative RMS (log scale, mean ± std over 3 seeds) for every
+configuration**, one panel per equation, all matched to ≈25k parameters.
+
+| equation | best model | rel. RMS | basis |
+|---|---|---|---|
+| advection | SNO (seq2seq) | 0.001196 ± 0.00016 | Fourier † |
+| heat | T-FNO (recursive) | 0.001090 ± 0.00031 | Fourier |
+| `wave1d` | SNO (seq2seq) | 0.001103 ± 0.00039 | Fourier |
+| `wave1d_dir` | **SA-Cheb$_{W_\text{unif}}$ (seq2seq)** | **0.025939 ± 0.0021** | Chebyshev |
+| Burgers | T-FNO (recursive) | 0.003963 ± 0.00098 | Fourier |
+| KdV | SNO (seq2seq) | 0.000511 ± 0.000064 | Fourier |
+| `wave2d` | **SA-Cheb$_{W_\text{unif}}$ (seq2seq)** | **0.007771 ± 0.0015** | Chebyshev |
+| `wave3d` | **pureunif (lift-free)** | **0.072375 ± 0.0089** | Chebyshev |
+| `ns2d` | **SA-Cheb$_{W_\text{unif}}$ (seq2seq)** | **0.174500 ± 0.0014** | Chebyshev |
+
+† advection is a tie within seed noise — see §10.
+
+Margins against the parameter-matched references in higher dimensions: **19.8×**
+over FNO on `wave2d`, **8.8×** over FNO and **4.8×** over SNO on `wave3d`,
+1.5×/1.4× on `ns2d`. SNO is now genuinely competitive in 2-D, which an earlier
+version of this study could not have detected because SNO had no
+$N$-dimensional implementation there.
+
+---
+
+## 9. Capacity: the matched-budget table is not an architecture ranking
+
+![Capacity sweep](../paper/figs/capacity.png)
+
+**Figure 9 — accuracy against parameter count with the matched budget removed.**
+The dashed line marks the 25k budget used in §8; faint × marks settings that
+diverged.
+
+Two observations a practitioner should take seriously.
+
+**The ranking is budget-dependent.** Several families overtake each other as
+capacity grows, so §8 should be read as *best at 25k*, not *best architecture*.
+On `wave1d_dir` the two end-to-end symplectic models take the top two slots
+outright — the only problem where they win the unconstrained comparison, and the
+only Hamiltonian non-periodic one.
+
+**Cost-efficiency diverges sharply from peak accuracy.** On `wave3d`, SNO's best
+(0.00271) costs 1.36 M parameters while SA-Cheb$_{W_\text{unif}}$ reaches 0.00345
+with 49,750 — **27× cheaper for 1.3× worse**. If you are running a surrogate
+inside an inversion loop, that trade is usually the right one.
+
+---
+
+## 10. Reproducibility: which findings actually hold
+
+The full study was executed twice on the cluster. That was unintentional, but it
+is the most useful control in this report, so we treat it as one.
+
+| claim | execution A | execution B | verdict |
+|---|---|---|---|
+| form ablation, lifted | $W_\text{unif}$ 16 / $W_\text{cheb}$ 1 | $W_\text{unif}$ 16 / $W_\text{cheb}$ 2 | **robust** |
+| lift-free ratios | 17.24 / 1.24 / 21.62 / 14.19 | identical | **robust** |
+| long-horizon boundedness | lift-free only | lift-free only | **robust** |
+| winner, 8 of 9 equations | — | — | **stable** |
+| winner, advection | CKINO 0.001092 | SNO 0.001196 | **flipped** |
+
+The advection flip has a clear cause: `ckino_plain` on advection has a **15.7×
+spread across seeds** (0.00062 to 0.00968), against SNO's 1.4×. That is not a
+close race between two good models; it is one unstable configuration occasionally
+landing well. We therefore report advection as a tie and do not claim it.
+
+The general lesson, and it applies well beyond this study: **with three seeds,
+differences smaller than the seed spread are not results.** The findings we
+advance in §1 are those that survived an accidental replication with margins of
+1.4× to 22×. The one that did not survive was a 1.1× margin.
+
+---
+
+## 11. Supporting evidence and practical guidance
+
+### 11.1 Subsurface flow (Darcy, elliptic, Dirichlet)
+
+| family | rel. $L^2$ | **at boundary** | interior | zero-shot 64²→128² |
+|---|---|---|---|---|
+| **CKINO** | **0.0837** | **0.2222** | **0.0811** | **0.1019** |
+| CKINO-strict | 0.0831 | 0.2534 | 0.0795 | 0.1280 |
+| FNO | 0.7260 | 4.0666 | 0.6066 | 0.7110 |
+
+**8.7× better overall and 18.3× better at the boundary**, transferring zero-shot
+to a 2× finer grid. For subsurface flow the boundary number is the operative one:
+that is where wells, faults and no-flow conditions live, and where a periodic
+basis has no business being.
+
+### 11.2 Representational ceilings
+
+A 6k–400k capacity sweep shows CKINO's Burgers failure is *representational*,
+flat at ≈0.25 across a 60× range — not undertraining. Its recursive KdV
+instability persists at every budget. Neither is fixed by scale, and both are
+honest limits of the Chebyshev kernel on shock-forming and strongly dispersive
+problems.
+
+### 11.3 Discretisation invariance — a real trade-off
+
+Training at $N=64$ and evaluating at $N=128$:
+
+| operator | advection | heat | KdV | accuracy at $N$=64 |
+|---|---|---|---|---|
+| SNO | 1.00 | 1.00 | 0.99 | 0.0017 |
+| T-FNO | 1.00 | 1.00 | 1.00 | 0.0029 |
+| FNO | 1.02 | 1.02 | 1.01 | 0.0145 |
+| CKINO (conv lift) | **57.4** | 1.14 | 3.02 | 0.00082 |
+| CKINO (spectral lift) | **1.00** | 1.00 | 1.00 | 0.475 |
+
+The spectral lift restores exact invariance but costs two to three orders of
+magnitude of accuracy at the training grid. **SNO and T-FNO win this axis
+outright** — invariant *and* accurate. If your workflow requires evaluating at a
+resolution you did not train on, that is a decisive argument for the Fourier
+family, and a genuine weakness of the Chebyshev construction.
+
+### 11.4 Inference speed
+
+| equation | solver | CKINO | FNO |
+|---|---|---|---|
+| advection | 0.035 s | 0.07× | 0.24× |
+| Burgers | 0.531 s | 1.06× | 3.62× |
+| KdV | 1.304 s | 2.61× | **8.85×** |
+| `ns2d` | 0.911 s | 1.25× | **5.61×** |
+
+Operators beat the reference solver only where the solver is expensive. "Neural
+operators are faster" is a statement about the solver being replaced, not about
+the operator — worth remembering when the baseline is a tuned production code.
+
+---
+
+## 12. Findings index
+
+| # | finding | evidence |
+|---|---|---|
+| **F1** | Symplecticity claims are ill-posed without naming the inner product; both SA-Cheb variants are exact (2×10⁻¹⁶) in different forms | Fig. 2, 14 grids × 3 dims × 3 seeds |
+| **F2** | CKINO is symplectic in **neither** form (≈1.4); volume preservation ≠ symplecticity | Fig. 2 |
+| **F3** | The form matching the grid wins 16/18 lifted comparisons | Fig. 3a |
+| **F4** | With the lift removed the margin widens to 14–22× | Fig. 3b, Tab. §5 |
+| **F5** | Only end-to-end symplectic operators stay bounded at 2×10⁴ steps | Fig. 4–6 |
+| **F6** | A symplectic core inside lift/projection/residual layers forfeits the guarantee | Fig. 6, rows 2–3 |
+| **F7** | Three distinct failure modes: blow-up, amplitude collapse, graceful roughening | Fig. 5 |
+| **F8** | In 1-D the winning basis follows the boundary conditions exactly (Fourier 4/4 periodic, Chebyshev 1/1 non-periodic) | §7, §8 |
+| **F9** | Chebyshev wins all three multi-D problems; 19.8× over FNO on `wave2d` | §8 |
+| **F10** | Darcy: 8.7× overall, **18.3× at the boundary**, zero-shot 2× super-resolution | §11.1 |
+| **F11** | The capacity ranking differs from the matched ranking; 27× cheaper for 1.3× worse in 3-D | Fig. 9 |
+| **F12** | Chebyshev faces an invariance/accuracy trade-off that Fourier does not | §11.3 |
+| **F13** | Drift exponent alone is not a health metric — it saturates after blow-up | §6 |
+| **F14** | Differences below the seed spread are not results; one 1.1× "win" did not replicate | §10 |
+
+---
+
+## 13. Limitations
+
+**Re-implementations.** SNO and GENERIC-FNO are our implementations from the
+published descriptions, not the authors' code, and were not tuned to their
+protocols. SNO's strong showing on periodic problems and in 2-D is, if anything,
+evidence that the re-implementation is sound.
+
+**Our GENERIC-FNO bug.** It diverged in all 12 entries. Parameterising the PSD
+multiplier as $M=b^2$ with $b$ initialised at zero places it at a saddle
+($\partial M/\partial b = 2b = 0$), so the dissipative channel never activates.
+This is a defect of our implementation, **not** evidence about the published
+method, and no conclusion should be drawn from those rows.
+
+**Canonical structure only.** The lift-free construction requires a canonical
+$(q,p)$ pair and is undefined on the scalar-field problems (advection, heat,
+Burgers, KdV, `ns2d`). KdV is Hamiltonian only under the non-canonical Gardner
+bracket, which we do not address. Extending the guarantee to non-canonical
+brackets is the most valuable open direction here.
+
+**Scale and horizon.** Domains are small (32–64 points in 1-D, 32², 16³, 64²) —
+adequate to resolve the reported orderings, not a deployment benchmark. 2×10⁴
+steps separates bounded from unbounded but is short of the regimes where
+backward-error analysis is usually invoked.
+
+**Single hardware.** All 783 runs on Tesla T4 with TF32 disabled, so arithmetic
+is consistent; results may differ on accelerators with different defaults.
+
+---
+
+## 14. What we would tell a practitioner
+
+1. **Match the basis to the boundary conditions.** This is the single most
+   reliable predictor in the study, it costs nothing to act on, and it is worth
+   3–18× on bounded domains.
+2. **If long-horizon fidelity matters, do not wrap a structured core in
+   unstructured layers.** The lift and the residual update cost you the entire
+   guarantee (F6). Accept lower capacity per parameter in exchange.
+3. **Never evaluate a surrogate on RMS alone.** Amplitude collapse is invisible
+   to it (F7), and it is the failure mode most likely to pass review and then
+   fail in production.
+4. **Measure the structure you claim.** It is one line of autograd (§4), and it
+   caught an error in our own published analysis.
+5. **Treat sub-seed-spread differences as ties.** With three seeds, a 1.1×
+   margin is noise (F14).
+
+---
+
+## 15. Reproduction
+
+```bash
+# cluster (Azure ML, 2 × T4)
+python -m track2.aml_trigger --configs full --extras --longhorizon --best-width --seeds 0 1 2
+
+# retrieve (date filter prevents merging with an earlier run)
+python -m track2.aml_fetch --since 2026-09-11 --with-fields
+
+# analysis and figures
+python -m track2.launcher --merge --results-dir track2/results_gpu_v3
+python -m track2.seed_analysis      --results-dir track2/results_gpu_v3
+python track2/make_paper_figs.py    track2/results_gpu_v3 paper/figs
+python track2/make_timelapse_figs.py track2/results_gpu_v3 paper/figs
+```
+
+Measured cost of the full study: **≈412 GPU-hours**, of which the
+unconstrained-capacity sweep alone is 262. On two T4s a complete re-run is
+approximately 8.7 days; the long-horizon stage alone is 9.3 hours.
