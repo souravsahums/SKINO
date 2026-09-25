@@ -52,7 +52,7 @@ math.NA  (Numerical Analysis)
 physics.comp-ph  (Computational Physics)
 
 COMMENTS
-22 pages, 12 figures, 7 tables. Code, full result set and figure generators:
+25 pages, 12 figures, 9 tables. Code, full result set and figure generators:
 https://github.com/souravsahums/SKINO
 
 LICENSE  (recommended)

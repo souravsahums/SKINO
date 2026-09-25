@@ -192,25 +192,41 @@ def rollout_figure(data, out_dir=RES):
     print("wrote", out)
 
 
-def figure(data, out_dir=RES):
+def figure(data, out_dir=RES, top_n=12, ncols=3):
+    """Best `top_n` configurations per problem, on a `ncols`-wide grid.
+
+    One row of nine panels renders the config labels illegible at page width.
+    """
     probs = [p for p in ORDER if any(k[0] == p for k in data)]
     names = sorted({k[1] for k in data})
-    fig, axes = plt.subplots(1, len(probs), figsize=(3.6 * len(probs), 5.2), squeeze=False)
-    for ax, prob in zip(axes[0], probs):
+    nrows = -(-len(probs) // ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.7 * ncols, 3.5 * nrows),
+                             squeeze=False)
+    flat = axes.ravel()
+    for ax, prob in zip(flat, probs):
         sub = [(n, data[(prob, n)]) for n in names if (prob, n) in data]
         sub.sort(key=lambda r: np.nanmean(r[1]["rms"]))
+        n_all = len(sub)
+        sub = sub[:top_n]
         ys = [np.nanmean(v["rms"]) for _, v in sub]
         es = [np.nanstd(v["rms"]) for _, v in sub]
-        ax.barh(range(len(sub)), ys, xerr=es, color="#4c78a8", edgecolor="k", capsize=3)
+        ax.barh(range(len(sub)), ys, xerr=es, color="#4c78a8", edgecolor="k",
+                capsize=2.5, height=0.72)
         ax.set_yticks(range(len(sub)))
-        ax.set_yticklabels([n for n, _ in sub], fontsize=7)
+        ax.set_yticklabels([n for n, _ in sub], fontsize=8)
         ax.set_xscale("log"); ax.invert_yaxis()
-        ax.set_xlabel(f"rel. RMS @ t={CP}")
-        ax.set_title(prob, fontweight="bold"); ax.grid(alpha=0.3, axis="x", which="both")
-    fig.suptitle("Multi-seed rollout accuracy (mean +/- std)", fontweight="bold")
+        ax.set_xlabel(f"rel. RMS @ t={CP}", fontsize=8)
+        ax.tick_params(axis="x", labelsize=8)
+        ax.set_title(f"{prob}   (best {len(sub)} of {n_all})",
+                     fontweight="bold", fontsize=10)
+        ax.grid(alpha=0.3, axis="x", which="both")
+    for ax in flat[len(probs):]:
+        ax.axis("off")
+    fig.suptitle("Multi-seed rollout accuracy (mean +/- std over 3 seeds)",
+                 fontweight="bold")
     fig.tight_layout()
     out = os.path.join(out_dir, "fig_multiseed.png")
-    fig.savefig(out, dpi=140); plt.close(fig)
+    fig.savefig(out, dpi=150); plt.close(fig)
     print("wrote", out)
 
 
