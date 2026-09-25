@@ -45,7 +45,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results_paper")
 
 LADDER = ["advection", "heat", "wave1d", "wave1d_dir", "burgers", "kdv"]
-STAGE = {"1d": LADDER, "2d": ["wave2d", "ns2d"], "3d": ["wave3d"]}
+# wave1d_cgl is deliberately NOT in the 1-D ladder. It is the reverse-direction
+# control for the form-matching claim (the one grid where W_cheb is the correct
+# quadrature), not part of the headline matrix whose run count is reported.
+STAGE = {"1d": LADDER, "2d": ["wave2d", "ns2d"], "3d": ["wave3d"],
+         "cgl": ["wave1d_cgl"]}
 
 CORE_CONFIGS = ["skino_noise", "strict_noise", "nosymp_noise",
                 "fno_noise", "tfno_noise", "skino_seq2seq",
@@ -59,6 +63,7 @@ SETTINGS = {
     "1d": dict(n_traj=512, horizon=600, t_out=500, stride=25, epochs=15),
     "2d": dict(n_traj=96, horizon=300, t_out=250, stride=12, epochs=15),
     "3d": dict(n_traj=48, horizon=200, t_out=150, stride=8, epochs=12),
+    "cgl": dict(n_traj=512, horizon=600, t_out=500, stride=25, epochs=15),
 }
 
 
@@ -71,7 +76,7 @@ HI_D_CONFIGS_3D = {c[0] for c in CONFIGS if c[1] in FAMILIES_3D}
 
 def build_jobs(stage: str, seeds, configs, budget: int, problems=None):
     """Deterministic, sorted job list. One job == one (problem, config, seed)."""
-    if stage != "1d":
+    if stage in ("2d", "3d"):
         allowed = HI_D_CONFIGS_3D if stage == "3d" else HI_D_CONFIGS
         configs = [c for c in configs if c in allowed]
     probs = STAGE[stage] if not problems else [p for p in STAGE[stage] if p in problems]
@@ -174,7 +179,7 @@ def merge(strict: bool = True, results_dir: str | None = None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", default="1d", choices=["1d", "2d", "3d"])
+    ap.add_argument("--stage", default="1d", choices=["1d", "2d", "3d", "cgl"])
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--configs", nargs="*", default=None,
                     help="default: the core configs; use 'full' for the whole matrix")

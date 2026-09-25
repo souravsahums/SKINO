@@ -37,7 +37,7 @@ ENVIRONMENT = "azureml://registries/azureml/environments/acpt-pytorch-2.2-cuda12
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                     # repo root -> uploaded as job code
-STAGES = ["1d", "2d", "3d"]
+STAGES = ["1d", "2d", "3d", "cgl"]
 
 # Problems swept by the unconstrained-capacity study, with the spatial dim each
 # one lives in (used only to size the sweep, not passed to the runner).

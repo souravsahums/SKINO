@@ -35,9 +35,12 @@ All fields are real ``torch.float32`` on the periodic domain ``[-L/2, L/2)``.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
+
+# Same weights the operator uses, so the CGL control cannot drift from the model.
+from ckino.nd import clenshaw_curtis_weights
 
 
 # ---------------------------------------------------------------------------
@@ -491,11 +494,141 @@ class BurgersProblem:
         return torch.stack(traj, 0)
 
 
+# ---------------------------------------------------------------------------
+# 1-D wave equation discretised on CHEBYSHEV-GAUSS-LOBATTO nodes.
+#
+# This is the reverse-direction control for the form-matching claim.  Every
+# other problem here is sampled on a uniform grid, where constant weights are
+# the correct quadrature and W_cheb is therefore the mismatched form.  On CGL
+# nodes the roles swap: Clenshaw-Curtis is the correct quadrature, so W_cheb
+# becomes the matched form.  If the paper's thesis holds, the preference
+# between ``sacheb`` and ``sacheb_naive`` must REVERSE here.  If it does not,
+# the honest reading is that constant weights are simply the better choice and
+# the matching story is wrong.
+#
+# Construction.  With the Chebyshev first-derivative matrix D and the CC weight
+# W, the weak-form stiffness S = D^T W D is symmetric, so the semi-discrete
+# operator
+#
+#     A = -W^{-1} S       satisfies    W A = -S = A^T W,
+#
+# i.e. it is self-adjoint in W exactly as Section 3 requires.  The system
+#
+#     u_t = v,    v_t = c^2 A u,        H = 1/2 (v^T W v + c^2 (Du)^T W (Du))
+#
+# is then canonically Hamiltonian in omega_W, and Stormer-Verlet keeps it so.
+# ---------------------------------------------------------------------------
+@dataclass
+class WaveCGLProblem:
+    """Dirichlet wave equation on [-1, 1], sampled at CGL nodes.
+
+    ``grid_n`` counts NODES, so the Chebyshev degree is ``grid_n - 1``.
+    """
+
+    name: str = "wave1d_cgl"
+    grid_n: int = 49          # nodes -> Chebyshev degree 48
+    length: float = 2.0       # domain [-1, 1]
+    c: float = 1.0
+    dt: float = 0.002
+    n_inner: int = 8
+    n_channels: int = 2
+    spatial_dims: int = 1
+
+    def __post_init__(self):
+        self._ops: dict = {}
+
+    def _cache(self, device, dtype):
+        key = (device, dtype)
+        hit = self._ops.get(key)
+        if hit is None:
+            N = self.grid_n - 1
+            j = torch.arange(N + 1, device=device, dtype=dtype)
+            x = torch.cos(math.pi * j / N)                 # x_0 = 1 ... x_N = -1
+            cc = torch.ones(N + 1, device=device, dtype=dtype)
+            cc[0] = 2.0
+            cc[-1] = 2.0
+            cc = cc * (-1.0) ** j
+            dX = x.unsqueeze(1) - x.unsqueeze(0)
+            eye = torch.eye(N + 1, device=device, dtype=dtype)
+            D = (cc.unsqueeze(1) / cc.unsqueeze(0)) / (dX + eye)
+            D = D - torch.diag(D.sum(dim=1))               # rows sum to zero
+            w = clenshaw_curtis_weights(N, device=device, dtype=dtype)
+            S = D.t() @ torch.diag(w) @ D                  # symmetric, PSD
+            A = -(S / w.unsqueeze(1))                      # -W^{-1} S
+            hit = (x, w, D, A)
+            self._ops[key] = hit
+        return hit
+
+    def grid(self, device=None) -> torch.Tensor:
+        return self._cache(device, torch.float32)[0]
+
+    def weights(self, device=None) -> torch.Tensor:
+        return self._cache(device, torch.float32)[1]
+
+    @staticmethod
+    def _clamp(u, v):
+        u = u.clone(); v = v.clone()
+        u[..., 0] = 0.0; u[..., -1] = 0.0
+        v[..., 0] = 0.0; v[..., -1] = 0.0
+        return u, v
+
+    def true_step(self, state: torch.Tensor) -> torch.Tensor:
+        u, v = state[:, 0, :], state[:, 1, :]
+        _, _, _, A = self._cache(u.device, u.dtype)
+        dt = self.dt / self.n_inner
+        c2 = self.c ** 2
+        for _ in range(self.n_inner):
+            v = v + 0.5 * dt * c2 * (u @ A.t())
+            u = u + dt * v
+            v = v + 0.5 * dt * c2 * (u @ A.t())
+            u, v = self._clamp(u, v)
+        return torch.stack([u, v], dim=1)
+
+    def energy(self, state: torch.Tensor) -> torch.Tensor:
+        """H = 1/2 (v^T W v + c^2 (Du)^T W (Du)), the CC-quadrature energy."""
+        u, v = state[..., 0, :], state[..., 1, :]
+        _, w, D, _ = self._cache(u.device, u.dtype)
+        ux = u @ D.t()
+        return 0.5 * ((v ** 2 * w).sum(-1) + (self.c ** 2) * (ux ** 2 * w).sum(-1))
+
+    def random_ic(self, n_batch: int, seed: int) -> torch.Tensor:
+        """Truncated Chebyshev series times (1 - x^2), so u = 0 at both ends.
+
+        Coefficients depend only on ``seed``, not on ``grid_n``, so the same
+        continuous field can be resampled at any resolution.
+        """
+        g = torch.Generator().manual_seed(seed)
+        x = self.grid()
+        env = 1.0 - x ** 2
+        K = 4
+        a = 2 * torch.rand(n_batch, K, generator=g) - 1
+        b = 2 * torch.rand(n_batch, K, generator=g) - 1
+        u = torch.zeros(n_batch, self.grid_n)
+        v = torch.zeros(n_batch, self.grid_n)
+        for k in range(1, K + 1):
+            Tk = torch.cos(k * torch.acos(x.clamp(-1.0, 1.0)))
+            u = u + a[:, k - 1 : k] * (Tk * env).unsqueeze(0)
+            v = v + 0.3 * b[:, k - 1 : k] * (Tk * env).unsqueeze(0)
+        u = 0.4 * u / (u.abs().amax(-1, keepdim=True) + 1e-6)
+        v = 0.4 * v / (v.abs().amax(-1, keepdim=True) + 1e-6)
+        u, v = self._clamp(u, v)
+        return torch.stack([u, v], dim=1).float()
+
+    @torch.no_grad()
+    def rollout(self, ic: torch.Tensor, n_steps: int) -> torch.Tensor:
+        traj, s = [ic.clone()], ic
+        for _ in range(n_steps):
+            s = self.true_step(s)
+            traj.append(s.clone())
+        return torch.stack(traj, dim=0)
+
+
 PROBLEMS = {
     "advection": AdvectionProblem,
     "heat": HeatProblem,
     "wave1d": WaveProblem,
     "wave1d_dir": WaveDirichletProblem,
+    "wave1d_cgl": WaveCGLProblem,
     "burgers": BurgersProblem,
     "kdv": KdVProblem,
 }
@@ -534,6 +667,10 @@ def pde_rhs(problem, state: torch.Tensor) -> torch.Tensor:
     if name == "wave1d_dir":
         u, v = state[:, 0], state[:, 1]
         return torch.stack([v, (problem.c ** 2) * problem._uxx(u)], dim=1)
+    if name == "wave1d_cgl":
+        u, v = state[:, 0], state[:, 1]
+        A = problem._cache(u.device, u.dtype)[3]
+        return torch.stack([v, (problem.c ** 2) * (u @ A.t())], dim=1)
     if name == "wave2d":
         u, v = state[:, 0], state[:, 1]
         n = u.shape[-1]
@@ -855,6 +992,23 @@ def _selftest() -> None:
     ub = spectral_resample(up, 32)
     err = (u - ub).abs().amax().item()
     print(f"[resample] 32->64->32 band-limited round-trip max-abs err = {err:.3e}")
+
+    # The CGL control only means anything if its spatial operator really is
+    # self-adjoint in the Clenshaw-Curtis weight, so check that directly.
+    prob = get_problem("wave1d_cgl")
+    _, w, _, A = prob._cache(torch.device("cpu"), torch.float64)
+    WA = torch.diag(w) @ A
+    asym = (WA - WA.t()).abs().amax().item() / WA.abs().amax().item()
+    print(f"[wave1d_cgl] relative |WA - A^T W| = {asym:.3e}   (must be ~machine eps)")
+
+    ic = prob.random_ic(8, seed=123)
+    traj = prob.rollout(ic, 500)
+    E = torch.stack([prob.energy(traj[t]) for t in range(traj.shape[0])])
+    rel = (E - E[0]).abs().mean().item() / (E[0].abs().mean().item() + 1e-12)
+    bc = traj[:, :, 0, :][..., [0, -1]].abs().amax().item()
+    amp = traj[:, :, 0, :].abs().amax().item()
+    print(f"[wave1d_cgl] 500 steps  rel|dE|={rel:.3%}  boundary={bc:.2e}  "
+          f"max|u|={amp:.3f}")
 
 
 if __name__ == "__main__":
