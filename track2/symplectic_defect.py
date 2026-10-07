@@ -55,6 +55,7 @@ import argparse
 import json
 import os
 
+import numpy as np
 import torch
 
 from ckino.nd import SeparableKernelIntegralND, clenshaw_curtis_weights, kte_map
@@ -106,11 +107,13 @@ def _jvp(field, q, v):
     return torch.autograd.grad(g, u, grad_outputs=v, create_graph=False)[0]
 
 
-def defect_probe(field, q, W, n_probe: int = 96, seed: int = 0):
-    """Hutchinson estimate of ||WA - A^T W||_F / ||WA||_F -- O(1) in grid size.
+def defect_probe(field, q, W, n_probe: int = 96, seed: int = 0, independent: bool = False):
+    """Hutchinson estimate of ||WA - A^T W||_F / ||WA||_F.
 
-    Uses ||M||_F^2 = E_v ||M v||^2 with M v = W(Av) - A^T(Wv), which needs one
-    JVP and one VJP per probe instead of one backward pass per degree of freedom.
+    Uses ||M||_F^2 = E_v ||M v||^2 with M v = W(Av) - A^T(Wv): one JVP and one VJP
+    per probe, so the NUMBER of passes is 2m whatever the grid; each pass still
+    costs one operator evaluation.  ``independent`` draws separate probes for the
+    denominator instead of sharing them with the numerator.
     """
     gen = torch.Generator().manual_seed(seed)
     num = den = 0.0
@@ -119,8 +122,45 @@ def defect_probe(field, q, W, n_probe: int = 96, seed: int = 0):
         Av = _jvp(field, q, v)
         AtWv = _vjp(field, q, W * v)
         num += float(((W * Av - AtWv) ** 2).sum())
+        if independent:
+            u = torch.randn(q.shape, generator=gen, dtype=q.dtype).to(q.device)
+            Av = _jvp(field, q, u)
         den += float(((W * Av) ** 2).sum())
     return (num ** 0.5) / (den ** 0.5 + 1e-30)
+
+
+def probe_study(dims=(1, 2, 3), probes=(8, 16, 32, 64, 96), repeats=40, rank=6,
+                seed=0, device="cpu"):
+    """Probe estimator vs the dense defect: bias, probe-to-probe spread, and m.
+
+    Scored on the off-diagonal (O(1)) entries, where probe noise can matter; the
+    diagonal entries are exactly zero for every probe and need no study.
+    """
+    grids = {1: 64, 2: 24, 3: 12}
+    rows = []
+    for d in dims:
+        n = grids[d]
+        ns = [n] * d
+        q = torch.randn(1, 1, *[m + 1 for m in ns], device=device, dtype=torch.float64) * 0.5
+        fields = build_fields(d, n, rank, seed, device)
+        for label, form in (("sacheb", "W_unif"), ("sacheb_naive", "W_cheb")):
+            W = weight_tensor(ns, FORMS[form], device=device)
+            exact = defect_exact(fields[label], q, W)
+            for indep in (False, True):
+                for m in probes:
+                    est = np.array([defect_probe(fields[label], q, W, m, seed=1000 * r + m,
+                                                 independent=indep) for r in range(repeats)])
+                    rows.append({"d": d, "n": n, "dof": q.numel(), "model": label,
+                                 "form": form, "probes": "independent" if indep else "shared",
+                                 "m": m, "exact": exact, "mean": float(est.mean()),
+                                 "rel_bias": float(est.mean() / exact - 1),
+                                 "rel_sd": float(est.std(ddof=1) / exact),
+                                 "rel_p95_abs_err": float(np.percentile(abs(est / exact - 1), 95))})
+                    r = rows[-1]
+                    print(f"  d={d} {label:13s}{form} {r['probes']:11s} m={m:3d}  exact={exact:.4f}  "
+                          f"bias={r['rel_bias']:+.3%}  sd={r['rel_sd']:.2%}  "
+                          f"p95|err|={r['rel_p95_abs_err']:.2%}", flush=True)
+    return rows
 
 
 def defect_exact(field, q, W):
@@ -185,9 +225,21 @@ def main(argv=None):
     ap.add_argument("--forms", nargs="*", default=["W_cheb", "W_unif"], choices=list(FORMS),
                     help="inner products to score against; each also adds its own construction")
     ap.add_argument("--out-tag", default="", help="suffix for the output file")
+    ap.add_argument("--probe-study", action="store_true",
+                    help="measure the probe estimator against the dense defect and exit")
+    ap.add_argument("--repeats", type=int, default=40)
     a = ap.parse_args(argv)
     os.makedirs(RES, exist_ok=True)
     dev = "cuda" if (a.device == "cuda" and torch.cuda.is_available()) else "cpu"
+    if a.probe_study:
+        rows = probe_study(tuple(a.dims), repeats=a.repeats, rank=a.rank, seed=a.seed,
+                           device=dev)
+        name = f"symplectic_defect_probestudy_s{a.seed}.json"
+        with open(os.path.join(RES, name), "w") as f:
+            json.dump({"_meta": {"repeats": a.repeats, "rank": a.rank, "seed": a.seed},
+                       "rows": rows}, f, indent=2)
+        print(f"\n[saved] {name}")
+        return rows
     kinds = [FORMS[f] for f in a.forms]
 
     out = {"_meta": {"problem": "symplectic_defect", "dims": a.dims, "rank": a.rank,

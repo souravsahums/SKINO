@@ -31,6 +31,15 @@ for pat, rep in subs:
     body = re.sub(pat, rep, body)
 abstract = re.sub(r"\s+", " ", body).strip()
 
+# counts for the Comments field, taken from the source and the last build log
+n_fig = len(re.findall(r"\\begin\{figure\}", tex))
+n_tab = (len(re.findall(r"\\begin\{table\}", tex))
+         + len(re.findall(r"\\captionof\{table\}", tex)))
+log_path = os.path.join(HERE, "weight_of_the_adjoint.log")
+m = (re.search(r"Output written.*?\((\d+) pages", open(log_path, encoding="latin-1").read())
+     if os.path.exists(log_path) else None)
+n_pages = m.group(1) if m else "?"
+
 meta = f"""arXiv submission metadata -- paste these into the web form
 =========================================================
 
@@ -52,7 +61,7 @@ math.NA  (Numerical Analysis)
 physics.comp-ph  (Computational Physics)
 
 COMMENTS
-25 pages, 12 figures, 9 tables. Code, full result set and figure generators:
+{n_pages} pages, {n_fig} figures, {n_tab} tables. Code, full result set and figure generators:
 https://github.com/souravsahums/SKINO
 
 LICENSE  (recommended)

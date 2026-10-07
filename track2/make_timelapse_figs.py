@@ -45,10 +45,12 @@ def load(prob, seed=0):
 
 
 def final_rms(prob):
-    """Mean final relative error over all test trajectories and seeds.
+    """Population result per family: median final relative error over seeds, and
+    how many seeds stayed bounded (relative RMS <= 3).
 
-    The panels show ONE trajectory; this is the population number, so a row that
-    happens to look calm cannot be read as a family that stayed accurate.
+    The panels show ONE trajectory of ONE seed; these are the population numbers,
+    so a row that happens to look calm cannot be read as a family that stayed
+    accurate.  The median is used because one diverged seed dominates a mean.
     """
     import glob
     agg = {}
@@ -58,13 +60,16 @@ def final_rms(prob):
             if fam == "_meta" or not isinstance(rec, dict) or not rec.get("curve"):
                 continue
             agg.setdefault(fam, []).append(rec["curve"][-1]["rel_rms"])
-    return {k: float(np.mean(v)) for k, v in agg.items()}
+    return {k: (float(np.median(v)), int(sum(x <= 3 for x in v)), len(v))
+            for k, v in agg.items()}
 
 
 def tag(v):
     if v is None:
         return ""
-    return f"\nmean err {v:.2f}" if v < 100 else f"\nmean err {v:.0e}"
+    med, nb, n = v
+    s = f"{med:.2f}" if med < 100 else f"{med:.0e}"
+    return f"\nmedian err {s}\nbounded {nb}/{n} seeds"
 
 
 # ------------------------------------------------------------------ 1-D lapse
@@ -177,15 +182,15 @@ if __name__ == "__main__":
     lapse_1d("wave1d_dir",
              ["sacheb_pure_naive", "sacheb_pure", "sacheb_naive", "sno", "fno"],
              "timelapse_wave1d_dir.png",
-             "wave1d-Dir, autoregressive rollout to $2\\times10^{4}$ steps: reference "
-             "solver (grey) vs operator prediction")
+             "wave1d-Dir, rollout to $2\\times10^{4}$ steps, seed 0, first test trajectory: "
+             "reference solver (grey) vs operator")
     lapse_1d("wave1d",
              ["sacheb_pure_naive", "sacheb_pure", "sacheb_naive", "sno", "fno"],
              "timelapse_wave1d.png",
-             "wave1d, autoregressive rollout to $2\\times10^{4}$ steps: only the "
-             "lift-free operators stay on the solution manifold")
+             "wave1d, rollout to $2\\times10^{4}$ steps, seed 0, first test trajectory: "
+             "reference solver (grey) vs operator")
     lapse_2d("wave2d",
              ["sacheb_pure_naive", "sacheb_naive", "sno", "fno"],
              "timelapse_wave2d.png",
-             "wave-2D displacement field: reference solver against operators over a "
-             "$2\\times10^{4}$-step rollout")
+             "wave-2D displacement, rollout to $2\\times10^{4}$ steps, seed 0, "
+             "first test trajectory")

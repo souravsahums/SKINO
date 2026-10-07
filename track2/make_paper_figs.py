@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 
-D = sys.argv[1] if len(sys.argv) > 1 else "track2/results_gpu_v2"
+D = sys.argv[1] if len(sys.argv) > 1 else "track2/results_gpu_v3"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "paper/figs"
 os.makedirs(OUT, exist_ok=True)
 
@@ -165,9 +165,12 @@ def fig_longhorizon():
                 if fam not in cur:
                     continue
                 steps = [c["step"] for c in cur[fam][0]]
-                ys = np.mean([[c[key] for c in run] for run in cur[fam]], axis=0)
-                ax.loglog(steps, np.maximum(ys, 1e-12), ls, color=col, lw=lw,
+                # median + seed range: a mean lets one diverged seed hide two bounded ones
+                runs = np.maximum(np.array([[c[key] for c in run] for run in cur[fam]]), 1e-12)
+                ax.loglog(steps, np.median(runs, axis=0), ls, color=col, lw=lw,
                           label=lab if (row == 0 and j == 0) else None)
+                ax.fill_between(steps, runs.min(axis=0), runs.max(axis=0), color=col,
+                                alpha=0.12, lw=0)
             ax.set_xlim(1, 2e4)
             if row == 0:
                 ax.set_title(NICE[p], fontweight="bold")
@@ -180,8 +183,9 @@ def fig_longhorizon():
                 ax.set_ylabel(ylab)
     axes[0, 0].legend(loc="upper left", fontsize=6.6, framealpha=0.95)
     axes[0, 0].text(1.6, 1.6, "error $=$ signal", fontsize=6, style="italic")
-    fig.suptitle("Long-horizon rollout to $2\\times10^{4}$ steps: only the lift-free "
-                 "(end-to-end symplectic) operators stay bounded", y=1.0, fontsize=10)
+    fig.suptitle("Rollout to $2\\times10^{4}$ steps (line: median of 3 seeds; band: seed range). "
+                 "Only the matched-form lift-free operator stays bounded on every problem and seed",
+                 y=1.0, fontsize=9)
     fig.savefig(os.path.join(OUT, "longhorizon.png"))
     plt.close(fig)
     print("wrote longhorizon.png")
@@ -250,21 +254,26 @@ def fig_basis(mat):
     rows.sort(key=lambda r: r[1])
     rows = rows[:12]
     CHEB = ("skino", "strict", "sacheb", "naive", "nosymp", "purecheb", "pureunif")
+    FOURIER = ("fno", "tfno", "ufno", "sno")
+    C_OTHER = "#9e9e9e"
     names, vals, cols = [], [], []
     for c, m in rows:
         nm = ("CKINO" + c[5:] if c.startswith("skino") else c).replace("_", " ")
         names.append(nm); vals.append(m)
-        cols.append(C_UNIF if any(t in c for t in CHEB) else "#1f77b4")
+        fam = c.split("_")[0]
+        cols.append(C_UNIF if any(t in c for t in CHEB)
+                    else "#1f77b4" if fam in FOURIER else C_OTHER)
     fig, ax = plt.subplots(figsize=(6.4, 3.2))
     y = np.arange(len(names))[::-1]
     ax.barh(y, vals, color=cols, edgecolor="k", linewidth=0.4)
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=7.5)
-    ax.set_xscale("log"); ax.set_xlabel("relative RMS at $t=200$")
-    ax.set_title("wave1d-Dir: Hamiltonian $+$ non-periodic\n"
-                 "every Chebyshev operator beats every Fourier operator", fontsize=9)
+    ax.set_xscale("log"); ax.set_xlabel("relative RMS at $t=200$ (mean of 3 seeds)")
+    ax.set_title("wave1d-Dir: Hamiltonian $+$ non-periodic, the 12 best configurations\n"
+                 "the top three are Chebyshev; below them the bases interleave", fontsize=9)
     ax.legend(handles=[Line2D([], [], color=C_UNIF, lw=6, label="Chebyshev basis"),
-                       Line2D([], [], color="#1f77b4", lw=6, label="Fourier basis")],
-              loc="lower right", fontsize=7.5)
+                       Line2D([], [], color="#1f77b4", lw=6, label="Fourier basis"),
+                       Line2D([], [], color=C_OTHER, lw=6, label="other")],
+              loc="upper right", fontsize=7.5)
     fig.savefig(os.path.join(OUT, "basis_boundary.png"))
     plt.close(fig)
     print("wrote basis_boundary.png")
