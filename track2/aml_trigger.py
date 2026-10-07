@@ -112,6 +112,173 @@ def make_bestwidth_command(problem, seed):
     return " ; ".join(cmds) + _COLLECT
 
 
+# ---------------------------------------------------------------------------
+# Review suite: the experiments requested in review, and ONLY those.  Each job is
+# small and independent so the cluster queue packs them onto its nodes and a
+# failure costs one job, not the suite.  Submitted to its own experiment
+# (skino-review) so aml_fetch can gather exactly these results.
+# ---------------------------------------------------------------------------
+GRID_CONFIGS = {
+    "cgl": ["sacheb_plain", "naive_plain", "sacheb_seq2seq", "naive_seq2seq",
+            "purecheb_plain", "pureunif_plain", "sno_seq2seq", "tfno_seq2seq", "fno_plain"],
+    "kte": ["sacheb_plain", "naive_plain", "kte_plain", "sacheb_seq2seq", "naive_seq2seq",
+            "kte_seq2seq", "purecheb_plain", "pureunif_plain", "purekte_plain",
+            "sno_seq2seq", "fno_plain"],
+}
+HEADLINE_CONFIGS = ["sacheb_plain", "naive_plain", "sacheb_seq2seq", "naive_seq2seq",
+                    "purecheb_plain", "pureunif_plain"]
+_STAGED = ["sacheb_pure_naive", "sacheb_canon_naive", "sacheb_nores_naive", "sacheb_naive",
+           "persistence"]
+LH_FAMILIES = {
+    "wave1d": _STAGED + ["sacheb_pure_naive@random", "sacheb_pure_naive@short", "sno", "fno",
+                         "sacheb_pure_naive@eps=0.01", "sacheb_pure_naive@eps=0.1",
+                         "sacheb_pure_naive@eps=1.0"],
+    "wave1d_dir": _STAGED + ["sacheb_pure_naive@random", "sacheb_pure_naive@short", "sno",
+                             "fno", "sacheb_pure_naive@eps=0.01", "sacheb_pure_naive@eps=0.1",
+                             "sacheb_pure_naive@eps=1.0"],
+    "wave2d": _STAGED,
+    "wave3d": _STAGED,
+    "wave1d_cgl": ["sacheb_pure", "sacheb_pure_naive", "sacheb", "sacheb_naive", "persistence"],
+    "wave1d_kte": ["sacheb_pure_kte", "sacheb_pure", "sacheb_pure_naive", "sacheb_kte",
+                   "sacheb", "sacheb_naive", "persistence"],
+}
+MULTIRES_PROBLEMS = ["wave1d_cgl", "wave1d_dir"]
+REVIEW_PARTS = ("grids", "seeds", "longhorizon", "multires")
+
+# Cost model, seconds on one Tesla T4, from the train_time_s recorded in
+# results_gpu_v3 (matrix: 512 traj x 600 steps x 15 epochs in 1-D).  CGL/KTE runs on
+# 65 nodes are costed as the 64-point 1-D problems.
+_MATRIX_S = {
+    "plain": {"1d": 255, "wave2d": 81, "ns2d": 103, "wave3d": 73},
+    "seq2seq": {"1d": 120, "wave2d": 37, "ns2d": 49, "wave3d": 32},
+    "pure": {"wave1d": 458, "wave1d_dir": 342, "1d": 400, "wave2d": 115, "wave3d": 98},
+    "sno_seq2seq": {"1d": 112}, "tfno_seq2seq": {"1d": 63}, "fno_plain": {"1d": 77},
+}
+_PER_RUN_OVERHEAD_S = 40          # process start, data generation, evaluation
+# Long-horizon totals (training + 2e4-step rollout), measured per family class.
+_LH_S = {
+    "pure": {"wave1d": 447, "wave1d_dir": 347, "wave2d": 601, "wave3d": 1004, "1d": 350},
+    "lifted": {"wave1d": 272, "wave1d_dir": 279, "wave2d": 468, "wave3d": 750, "1d": 280},
+    "sno": {"wave1d": 286, "wave1d_dir": 293},
+    "fno": {"wave1d": 97, "wave1d_dir": 103},
+}
+_ROLLOUT_ONLY = {"1d": 0.30, "wave2d": 0.6, "wave3d": 0.7}   # share of a pure LH run
+_DIAG_OVERHEAD = {"1d": 1.15, "wave2d": 1.30, "wave3d": 1.25}
+_JOB_STARTUP_S = 180              # image already cached on the node; ~600 s on a cold node
+
+
+def _dimkey(problem):
+    return problem if problem in ("wave2d", "wave3d", "ns2d") else "1d"
+
+
+def _matrix_cost(problem, config):
+    d = _dimkey(problem)
+    if config.startswith("pure"):
+        s = _MATRIX_S["pure"].get(problem, _MATRIX_S["pure"].get(d))
+    elif config.endswith("seq2seq") and config in _MATRIX_S:
+        s = _MATRIX_S[config][d]
+    elif config.endswith("seq2seq"):
+        s = _MATRIX_S["seq2seq"][d]
+    elif config in _MATRIX_S:
+        s = _MATRIX_S[config][d]
+    else:
+        s = _MATRIX_S["plain"][d]
+    return s + _PER_RUN_OVERHEAD_S
+
+
+def _lh_cost(problem, spec):
+    d = _dimkey(problem)
+    base = spec.split("@")[0]
+    key = problem if problem in ("wave1d", "wave1d_dir", "wave2d", "wave3d") else d
+    pure = _LH_S["pure"].get(key, _LH_S["pure"]["1d"])
+    if base == "persistence":
+        s = 0.25 * _ROLLOUT_ONLY[d] * pure
+    elif spec.endswith("@random") or spec.endswith("@short"):
+        s = _ROLLOUT_ONLY[d] * pure * (1.1 if spec.endswith("@short") else 1.0)
+    elif base in ("sacheb_pure", "sacheb_pure_naive", "sacheb_pure_kte", "sacheb_canon_naive"):
+        s = pure
+    elif base in ("sno", "fno"):
+        s = _LH_S[base].get(key, 300)
+    else:
+        s = _LH_S["lifted"].get(key, _LH_S["lifted"]["1d"])
+    return s * _DIAG_OVERHEAD[d]
+
+
+def review_jobs(parts=REVIEW_PARTS, grid_seeds=(0, 1, 2, 3, 4), extra_seeds=(3, 4),
+                lh_seeds=(0, 1, 2), mr_seeds=(0, 1, 2), lh_steps=20000):
+    """[(display_name, command, estimated_seconds)] for the review experiments."""
+    L = "python -m track2.launcher --device cuda --jobs 1 --gpus 1 --save-ckpt --n-test 32"
+    jobs = []
+    if "grids" in parts:
+        for stage in ("cgl", "kte"):
+            prob = {"cgl": "wave1d_cgl", "kte": "wave1d_kte"}[stage]
+            for s in grid_seeds:
+                cfgs = GRID_CONFIGS[stage]
+                jobs.append((f"review-{stage}-s{s}",
+                             f"{L} --stage {stage} --seeds {s} --save-fields "
+                             f"--configs {' '.join(cfgs)}",
+                             sum(_matrix_cost(prob, c) for c in cfgs)))
+    if "seeds" in parts:
+        halves = {"a": ["advection", "heat", "wave1d"], "b": ["wave1d_dir", "burgers", "kdv"]}
+        cfgs = " ".join(HEADLINE_CONFIGS)
+        two_ch = {"wave1d", "wave1d_dir", "wave2d", "wave3d"}
+        for s in extra_seeds:
+            for h, probs in halves.items():
+                est = sum(_matrix_cost(p, c) for p in probs for c in HEADLINE_CONFIGS
+                          if not c.startswith("pure") or p in two_ch)
+                jobs.append((f"review-seeds-1d{h}-s{s}",
+                             f"{L} --stage 1d --problems {' '.join(probs)} --seeds {s} "
+                             f"--configs {cfgs}", est))
+            est = sum(_matrix_cost(p, c) for p in ("wave2d", "ns2d", "wave3d")
+                      for c in HEADLINE_CONFIGS if not c.startswith("pure") or p in two_ch)
+            jobs.append((f"review-seeds-hid-s{s}",
+                         f"{L} --stage 2d --seeds {s} --configs {cfgs} ; "
+                         f"{L} --stage 3d --seeds {s} --configs {cfgs}", est))
+    if "longhorizon" in parts:
+        for p, fams in LH_FAMILIES.items():
+            hi = p in ("wave2d", "wave3d")
+            flags = ("--diag-dtype float32 --lyap-steps 300" if hi
+                     else "--diag-dtype float64 --lyap-steps 1000")
+            for s in lh_seeds:
+                jobs.append((f"review-lh-{p}-s{s}",
+                             f"python -m track2.longhorizon --problem {p} --steps {lh_steps} "
+                             f"--device cuda --seed {s} --diagnostics --track-training "
+                             f"--save-ckpt --tag review {flags} --families "
+                             + " ".join(fams),
+                             sum(_lh_cost(p, f) for f in fams)))
+    if "multires" in parts:
+        fam_s = (_MATRIX_S["plain"]["1d"] * 2 + 400 * 2 + 235 + 77) * 0.83
+        for s in mr_seeds:
+            cmd = " ; ".join(f"python -m track2.multires --problem {p} --device cuda "
+                             f"--seed {s} --save-ckpt" for p in MULTIRES_PROBLEMS)
+            est = fam_s * len(MULTIRES_PROBLEMS) + 120
+            if s == mr_seeds[0]:
+                cmd += (" ; python -m track2.symplectic_defect --dims 1 2 3 --forms W_cheb "
+                        "W_unif W_kte --out-tag forms3 --device cuda --seed 0")
+                est += 120
+            jobs.append((f"review-multires-s{s}", cmd, est))
+    return [(n, c + _COLLECT, e + _JOB_STARTUP_S) for n, c, e in jobs]
+
+
+def makespan(seconds, nodes):
+    """Longest-processing-time-first packing: wall-clock with ``nodes`` in parallel."""
+    load = [0.0] * max(nodes, 1)
+    for s in sorted(seconds, reverse=True):
+        load[load.index(min(load))] += s
+    return max(load)
+
+
+def print_review_plan(jobs, nodes):
+    print(f"\n{'job':30s} {'est. min':>9}")
+    for name, _, est in jobs:
+        print(f"{name:30s} {est / 60:9.0f}")
+    total = sum(e for _, _, e in jobs)
+    wall = makespan([e for _, _, e in jobs], nodes)
+    print(f"\n{len(jobs)} jobs   total {total / 3600:.1f} GPU-h   "
+          f"wall-clock on {nodes} node(s) ~{wall / 3600:.1f} h   "
+          f"(+/-30%: rollout and diagnostic shares are estimated, training is measured)")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Trigger CKINO cluster jobs and exit.")
     ap.add_argument("--stages", nargs="+", default=STAGES, choices=STAGES,
@@ -123,7 +290,8 @@ def main(argv=None):
                     help="launcher configs to run (default: the launcher's core set; "
                          "use 'full' for the whole matrix)")
     ap.add_argument("--cluster", default=CLUSTER)
-    ap.add_argument("--experiment", default="skino-study")
+    ap.add_argument("--experiment", default=None,
+                    help="AML experiment name (default: skino-study, or skino-review with --review)")
     ap.add_argument("--no-save-fields", action="store_true",
                     help="skip saving prediction fields (smaller/faster)")
     ap.add_argument("--extras", action="store_true",
@@ -138,8 +306,43 @@ def main(argv=None):
                     help="problems for --best-width")
     ap.add_argument("--dry-run", action="store_true",
                     help="print what would be submitted and exit")
+    ap.add_argument("--review", action="store_true",
+                    help="submit ONLY the review experiments (nothing from the main matrix)")
+    ap.add_argument("--review-parts", nargs="+", default=list(REVIEW_PARTS),
+                    choices=REVIEW_PARTS, help="subset of the review suite")
+    ap.add_argument("--nodes", type=int, default=2,
+                    help="cluster nodes, used only for the wall-clock estimate")
     args = ap.parse_args(argv)
     save_fields = not args.no_save_fields
+    args.experiment = args.experiment or ("skino-review" if args.review else "skino-study")
+
+    if args.review:
+        jobs = review_jobs(tuple(args.review_parts), lh_steps=args.lh_steps)
+        print(f"workspace : {workspace_label()}")
+        print(f"cluster   : {args.cluster}   experiment: {args.experiment}")
+        print(f"review    : {' '.join(args.review_parts)}")
+        print_review_plan(jobs, args.nodes)
+        if args.dry_run:
+            for name, cmd, _ in jobs:
+                print(f"\n[{name}]\n  {cmd}")
+            print("\n--dry-run: nothing submitted.")
+            return
+        from azure.ai.ml import command
+        from azure.identity import DefaultAzureCredential
+
+        ml = get_ml_client(DefaultAzureCredential())
+        print(f"\nconnected to {ml.workspace_name} (rg={ml.resource_group_name})\n")
+        for name, cmd, _ in jobs:
+            created = ml.jobs.create_or_update(command(
+                code=ROOT, command=cmd, environment=ENVIRONMENT, compute=args.cluster,
+                display_name=name, experiment_name=args.experiment,
+                environment_variables={"KMP_DUPLICATE_LIB_OK": "TRUE"}))
+            print(f"submitted {created.name}  {name}")
+        print(f"\n{len(jobs)} review job(s) queued on '{args.cluster}' in experiment "
+              f"'{args.experiment}'. Fetch with:\n"
+              f"  python -m track2.aml_fetch --experiment {args.experiment} "
+              f"--out results_review --with-fields --with-ckpt")
+        return
 
     print(f"workspace : {workspace_label()}")
     print(f"cluster   : {args.cluster}")

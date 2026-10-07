@@ -34,13 +34,14 @@ import torch
 
 from .data import build_data
 from .metrics import full_metrics, horizon_pair
-from .models import FAMILIES_2D, FAMILIES_3D, build_matched
+from .models import (FAMILIES_2D, FAMILIES_3D, PHASE_SPACE_FAMILIES, build_matched,
+                     is_residual)
 from .pde_solvers import pde_rhs
 from .train import TrainConfig, _unroll_loss
 from .experiments_v2 import train_direct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RES = os.path.join(HERE, "results_paper")
+RES = os.environ.get("SKINO_RESULTS_DIR") or os.path.join(HERE, "results_paper")
 LADDER = ["advection", "heat", "wave1d", "burgers", "kdv"]
 
 # A one-step PDE residual is only meaningful when the macro step is small
@@ -107,19 +108,29 @@ CONFIGS = [
     ("naive_seq2seq",     "sacheb_naive", "seq2seq",   0.0,  0.0),
     ("purecheb_plain",    "sacheb_pure",       "recursive", 0.0, 0.0),
     ("pureunif_plain",    "sacheb_pure_naive", "recursive", 0.0, 0.0),
+    # third form, matched only on the Kosloff-Tal-Ezer grid (wave1d_kte)
+    ("kte_plain",         "sacheb_kte",        "recursive", 0.0, 0.0),
+    ("kte_seq2seq",       "sacheb_kte",        "seq2seq",   0.0, 0.0),
+    ("purekte_plain",     "sacheb_pure_kte",   "recursive", 0.0, 0.0),
 ]
 
-# Lift-free families ARE the one-step map, so they must not be wrapped in the
-# residual x + model(x) update -- that would break the symplecticity they exist
-# to demonstrate.
-PURE_FAMILIES = ("sacheb_pure", "sacheb_pure_naive")
+# Kept for callers that imported it; the policy itself lives in models.
+PURE_FAMILIES = PHASE_SPACE_FAMILIES
+
+# Data seeds are fixed by build_data's seed_base (0), independent of --seed, so
+# every model and every seed is scored on the SAME test trajectories; --seed
+# changes only initialisation and minibatch order.
+SPLIT_SEED_BASE = {"train": 0, "val": 10_000, "test": 20_000}
 
 
-def train_recursive_pinn(model, data, cfg, lambda_pde: float, verbose=False, tag=""):
+def train_recursive_pinn(model, data, cfg, lambda_pde: float, verbose=False, tag="",
+                         on_epoch_end=None):
     """Recursive training, optionally with a PDE-residual (PINN-style) term.
 
     The residual is formed in physical units against the analytic RHS, so it is
     a genuine physics constraint rather than a smoothness prior.
+    ``on_epoch_end(epoch, model, train_loss)`` lets a caller log diagnostics
+    through training without a second training run.
     """
     torch.manual_seed(cfg.seed); random.seed(cfg.seed)
     prob = data.problem
@@ -153,6 +164,9 @@ def train_recursive_pinn(model, data, cfg, lambda_pde: float, verbose=False, tag
             opt.step(); run += float(loss.detach()) * j.shape[0]
         sch.step(); run /= w.shape[0]
         log["train_loss"].append(run)
+        if on_epoch_end is not None:
+            on_epoch_end(ep, model, run)
+            model.train()
         if verbose:
             print(f"    [{tag}] ep {ep+1}/{total} K={K} loss={run:.3e}", flush=True)
     log["train_time_s"] = time.time() - t0
@@ -220,6 +234,20 @@ def rollout_any(model, mode, cfg, truth, t_out: int):
     return torch.stack(out, 0)
 
 
+@torch.no_grad()
+def per_traj_rel_rms(pred, truth, checkpoints) -> dict:
+    """{checkpoint: [rel RMS of each test trajectory]}, for paired intervals."""
+    out = {}
+    for t in checkpoints:
+        if t >= min(pred.shape[0], truth.shape[0]):
+            continue
+        p, y = pred[t], truth[t]
+        red = tuple(range(1, p.dim()))
+        r = ((p - y) ** 2).sum(red).sqrt() / ((y ** 2).sum(red).sqrt() + 1e-12)
+        out[str(t)] = [float(f"{v:.6g}") for v in r.tolist()]
+    return out
+
+
 def run_problem(problem, args, budget=None):
     os.makedirs(RES, exist_ok=True)
     hi_d = problem in ("wave2d", "wave3d", "ns2d")
@@ -230,11 +258,12 @@ def run_problem(problem, args, budget=None):
     budget = budget or args.budget
 
     torch.manual_seed(args.seed); np.random.seed(args.seed); random.seed(args.seed)
-    data = build_data(problem, n_train=n_traj, n_val=12, n_test=12,
+    data = build_data(problem, n_train=n_traj, n_val=args.n_val, n_test=args.n_test,
                       horizon=horizon, device=args.device)
     prob = data.problem
     sd = getattr(prob, "spatial_dims", 1)
     truth = data.normalize(data.test_traj, channel_dim=2).transpose(0, 1).contiguous()
+    val_truth = data.normalize(data.val_traj, channel_dim=2).transpose(0, 1).contiguous()
     checkpoints = [c for c in (10, 25, 50, 100, 150, 200) if c <= t_out]
     print(f"[{problem}] traj={tuple(data.train_traj.shape)} t_out={t_out} budget={budget}")
 
@@ -249,7 +278,7 @@ def run_problem(problem, args, budget=None):
     for name, fam, mode, noise, lam_pde in selected:
         if hi_d and fam not in (FAMILIES_3D if sd == 3 else FAMILIES_2D):
             continue
-        if fam in PURE_FAMILIES and prob.n_channels != 2:
+        if fam in PHASE_SPACE_FAMILIES and prob.n_channels != 2:
             print(f"  [skip] {name}: {problem} is a scalar field, no canonical (q, p) split")
             continue
         if lam_pde > 0 and problem in PINN_UNRELIABLE:
@@ -260,7 +289,7 @@ def run_problem(problem, args, budget=None):
             epochs_per_k=max(round(args.epochs / 3), 1) if mode == "recursive" else args.epochs,
             stride=stride, noise_std=noise, lambda_energy=0.0, stencil=1,
             tf_start=1.0, tf_end=0.0, batch=args.batch,
-            residual=(mode == "recursive" and fam not in PURE_FAMILIES), seed=args.seed,
+            residual=(mode == "recursive" and is_residual(fam)), seed=args.seed,
         )
         try:
             model, npar, wr = build_matched(
@@ -281,12 +310,20 @@ def run_problem(problem, args, budget=None):
             pred = rollout_any(model, mode, cfg, truth, t_out)
             m = full_metrics(prob, pred, truth, checkpoints)
             uh, uh_last = horizon_pair(pred, truth)
+            vm = full_metrics(prob, rollout_any(model, mode, cfg, val_truth, t_out),
+                              val_truth, checkpoints)
             results[name] = {
                 "family": fam, "mode": mode, "noise": noise, "lambda_pde": lam_pde,
                 "params": npar, "width": list(wr), "train_time_s": log["train_time_s"],
                 "final_train_loss": log["final_val_mse"],
                 "usable_horizon": uh, "last_good_step": uh_last, "metrics": m,
+                # selection should use these, so the test split is only ever read once
+                "val_rel_rms": {k: v.get("rel_rms") for k, v in vm.items()},
+                "per_traj_rel_rms": per_traj_rel_rms(pred, truth, checkpoints),
             }
+            if args.save_ckpt:
+                torch.save(model.state_dict(),
+                           os.path.join(RES, f"ckpt_{problem}_{name}_s{args.seed}.pt"))
             last = m.get(str(checkpoints[-1]), {})
             print(f"  UH={uh} (last_good={uh_last})  @t={checkpoints[-1]}: "
                   f"rms={last.get('rel_rms', float('nan')):.3g} "
@@ -307,6 +344,8 @@ def run_problem(problem, args, budget=None):
     meta = {"problem": problem, "n_traj": n_traj, "horizon": horizon, "t_out": t_out,
             "grid_n": prob.grid_n, "dt": prob.dt, "budget": budget,
             "epochs": args.epochs, "seed": args.seed, "checkpoints": checkpoints,
+            "n_val": args.n_val, "n_test": args.n_test,
+            "split_seed_base": SPLIT_SEED_BASE, "stride": stride, "batch": args.batch,
             "hardware": hardware_info(args.device)}
     out = {"_meta": meta, **results}
     sub = "_sub" if args.configs or args.families else ""
@@ -337,6 +376,11 @@ def main(argv=None):
                    help="scaling sweep: run each family at every budget listed, "
                         "so each can also be tuned to its own best size")
     p.add_argument("--save-fields", action="store_true")
+    p.add_argument("--save-ckpt", action="store_true",
+                   help="write each trained model's state_dict as ckpt_<problem>_<config>_s<seed>.pt")
+    p.add_argument("--n-val", type=int, default=12)
+    p.add_argument("--n-test", type=int, default=12,
+                   help="test trajectories; the first 12 are always the original test set")
     p.add_argument("--device", default="auto",
                    help="cpu | cuda | auto")
     p.add_argument("--out-tag", default="",

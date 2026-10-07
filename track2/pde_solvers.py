@@ -35,12 +35,12 @@ All fields are real ``torch.float32`` on the periodic domain ``[-L/2, L/2)``.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import torch
 
 # Same weights the operator uses, so the CGL control cannot drift from the model.
-from ckino.nd import clenshaw_curtis_weights
+from ckino.nd import clenshaw_curtis_weights, kte_map
 
 
 # ---------------------------------------------------------------------------
@@ -522,14 +522,18 @@ class BurgersProblem:
 class WaveCGLProblem:
     """Dirichlet wave equation on [-1, 1], sampled at CGL nodes.
 
-    ``grid_n`` counts NODES, so the Chebyshev degree is ``grid_n - 1``.
+    ``grid_n`` counts NODES, so the Chebyshev degree is ``grid_n - 1``.  65
+    nodes makes the grid exactly the interpolation space of the operator's
+    65-coefficient basis.  ``dt`` gives the same c*dt/L = 0.005 per stored step
+    as ``wave1d_dir``, so the control is no easier per step than the problem it
+    controls for.
     """
 
     name: str = "wave1d_cgl"
-    grid_n: int = 49          # nodes -> Chebyshev degree 48
+    grid_n: int = 65          # nodes -> Chebyshev degree 64
     length: float = 2.0       # domain [-1, 1]
     c: float = 1.0
-    dt: float = 0.002
+    dt: float = 0.01
     n_inner: int = 8
     n_channels: int = 2
     spatial_dims: int = 1
@@ -537,27 +541,42 @@ class WaveCGLProblem:
     def __post_init__(self):
         self._ops: dict = {}
 
+    def _nodes(self, N, device, dtype):
+        """(x, w, D): nodes, quadrature weights and first-derivative matrix."""
+        j = torch.arange(N + 1, device=device, dtype=dtype)
+        x = torch.cos(math.pi * j / N)                     # x_0 = 1 ... x_N = -1
+        cc = torch.ones(N + 1, device=device, dtype=dtype)
+        cc[0] = 2.0
+        cc[-1] = 2.0
+        cc = cc * (-1.0) ** j
+        dX = x.unsqueeze(1) - x.unsqueeze(0)
+        eye = torch.eye(N + 1, device=device, dtype=dtype)
+        D = (cc.unsqueeze(1) / cc.unsqueeze(0)) / (dX + eye)
+        D = D - torch.diag(D.sum(dim=1))                   # rows sum to zero
+        return x, clenshaw_curtis_weights(N, device=device, dtype=dtype), D
+
     def _cache(self, device, dtype):
         key = (device, dtype)
         hit = self._ops.get(key)
         if hit is None:
-            N = self.grid_n - 1
-            j = torch.arange(N + 1, device=device, dtype=dtype)
-            x = torch.cos(math.pi * j / N)                 # x_0 = 1 ... x_N = -1
-            cc = torch.ones(N + 1, device=device, dtype=dtype)
-            cc[0] = 2.0
-            cc[-1] = 2.0
-            cc = cc * (-1.0) ** j
-            dX = x.unsqueeze(1) - x.unsqueeze(0)
-            eye = torch.eye(N + 1, device=device, dtype=dtype)
-            D = (cc.unsqueeze(1) / cc.unsqueeze(0)) / (dX + eye)
-            D = D - torch.diag(D.sum(dim=1))               # rows sum to zero
-            w = clenshaw_curtis_weights(N, device=device, dtype=dtype)
+            x, w, D = self._nodes(self.grid_n - 1, device, dtype)
             S = D.t() @ torch.diag(w) @ D                  # symmetric, PSD
             A = -(S / w.unsqueeze(1))                      # -W^{-1} S
             hit = (x, w, D, A)
             self._ops[key] = hit
         return hit
+
+    def substeps(self) -> int:
+        """Leap-frog sub-steps per stored step, keeping dt_inner*sqrt(lam_max) <= 1.
+
+        The stable step shrinks like N^-2 on clustered nodes, so a fixed count
+        that is safe at 65 nodes is not at 129.
+        """
+        if "_nsub" not in self._ops:
+            A = self._cache(torch.device("cpu"), torch.float64)[3]
+            lam = torch.linalg.eigvals(-A[1:-1, 1:-1]).real.max().item()
+            self._ops["_nsub"] = max(self.n_inner, math.ceil(self.dt * math.sqrt(lam)))
+        return self._ops["_nsub"]
 
     def grid(self, device=None) -> torch.Tensor:
         return self._cache(device, torch.float32)[0]
@@ -573,15 +592,26 @@ class WaveCGLProblem:
         return u, v
 
     def true_step(self, state: torch.Tensor) -> torch.Tensor:
+        """Stormer-Verlet on the interior system.
+
+        The kick is masked so boundary values never move.  Clamping only at the end
+        of a micro-step is NOT equivalent: the boundary rows of W^{-1} S are large
+        (W^{-1} amplifies the small end weights), the drift would carry them into
+        u_B, and the second kick would leak them into the interior before the clamp.
+        """
         u, v = state[:, 0, :], state[:, 1, :]
         _, _, _, A = self._cache(u.device, u.dtype)
-        dt = self.dt / self.n_inner
+        mask = torch.ones(u.shape[-1], device=u.device, dtype=u.dtype)
+        mask[0] = 0.0
+        mask[-1] = 0.0
+        u, v = self._clamp(u, v)
+        n_sub = self.substeps()
+        dt = self.dt / n_sub
         c2 = self.c ** 2
-        for _ in range(self.n_inner):
-            v = v + 0.5 * dt * c2 * (u @ A.t())
+        for _ in range(n_sub):
+            v = v + 0.5 * dt * c2 * (u @ A.t()) * mask
             u = u + dt * v
-            v = v + 0.5 * dt * c2 * (u @ A.t())
-            u, v = self._clamp(u, v)
+            v = v + 0.5 * dt * c2 * (u @ A.t()) * mask
         return torch.stack([u, v], dim=1)
 
     def energy(self, state: torch.Tensor) -> torch.Tensor:
@@ -623,12 +653,32 @@ class WaveCGLProblem:
         return torch.stack(traj, dim=0)
 
 
+@dataclass
+class WaveKTEProblem(WaveCGLProblem):
+    """The same wave equation on the Kosloff-Tal-Ezer stretched grid.
+
+    x_j = arcsin(alpha xi_j) / arcsin(alpha) with xi_j the CGL nodes.  The true
+    quadrature is Clenshaw-Curtis times dx/dxi, which is neither constant nor
+    Clenshaw-Curtis, so on this grid BOTH standard forms are mismatched and only
+    the ``kte`` weight kind is matched.  Same construction as the CGL problem with
+    D_x = diag(dxi/dx) D_xi, so W A = A^T W holds exactly here too.
+    """
+
+    name: str = "wave1d_kte"
+
+    def _nodes(self, N, device, dtype):
+        _, cc, D_xi = super()._nodes(N, device, dtype)
+        x, jac = kte_map(N, device=device, dtype=dtype)
+        return x, cc * jac, D_xi / jac.unsqueeze(1)
+
+
 PROBLEMS = {
     "advection": AdvectionProblem,
     "heat": HeatProblem,
     "wave1d": WaveProblem,
     "wave1d_dir": WaveDirichletProblem,
     "wave1d_cgl": WaveCGLProblem,
+    "wave1d_kte": WaveKTEProblem,
     "burgers": BurgersProblem,
     "kdv": KdVProblem,
 }
@@ -667,7 +717,7 @@ def pde_rhs(problem, state: torch.Tensor) -> torch.Tensor:
     if name == "wave1d_dir":
         u, v = state[:, 0], state[:, 1]
         return torch.stack([v, (problem.c ** 2) * problem._uxx(u)], dim=1)
-    if name == "wave1d_cgl":
+    if name in ("wave1d_cgl", "wave1d_kte"):
         u, v = state[:, 0], state[:, 1]
         A = problem._cache(u.device, u.dtype)[3]
         return torch.stack([v, (problem.c ** 2) * (u @ A.t())], dim=1)
@@ -993,22 +1043,29 @@ def _selftest() -> None:
     err = (u - ub).abs().amax().item()
     print(f"[resample] 32->64->32 band-limited round-trip max-abs err = {err:.3e}")
 
-    # The CGL control only means anything if its spatial operator really is
-    # self-adjoint in the Clenshaw-Curtis weight, so check that directly.
-    prob = get_problem("wave1d_cgl")
-    _, w, _, A = prob._cache(torch.device("cpu"), torch.float64)
-    WA = torch.diag(w) @ A
-    asym = (WA - WA.t()).abs().amax().item() / WA.abs().amax().item()
-    print(f"[wave1d_cgl] relative |WA - A^T W| = {asym:.3e}   (must be ~machine eps)")
+    # The CGL and KTE controls only mean anything if their spatial operator really
+    # is self-adjoint in the grid's own quadrature, so check that directly.
+    for name in ("wave1d_cgl", "wave1d_kte"):
+        prob = get_problem(name)
+        _, w, _, A = prob._cache(torch.device("cpu"), torch.float64)
+        WA = torch.diag(w) @ A
+        asym = (WA - WA.t()).abs().amax().item() / WA.abs().amax().item()
+        lam = torch.linalg.eigvals(-A[1:-1, 1:-1]).real.max().item()
+        cfl = (prob.dt / prob.substeps()) * math.sqrt(lam)
+        print(f"[{name}] relative |WA - A^T W| = {asym:.3e}   (must be ~machine eps)   "
+              f"leap-frog dt*sqrt(lam_max) = {cfl:.2f}  (stable < 2)")
+        big = get_problem(name, grid_n=129)
+        print(f"[{name}] sub-steps: {prob.substeps()} at 65 nodes, "
+              f"{big.substeps()} at 129 nodes")
 
-    ic = prob.random_ic(8, seed=123)
-    traj = prob.rollout(ic, 500)
-    E = torch.stack([prob.energy(traj[t]) for t in range(traj.shape[0])])
-    rel = (E - E[0]).abs().mean().item() / (E[0].abs().mean().item() + 1e-12)
-    bc = traj[:, :, 0, :][..., [0, -1]].abs().amax().item()
-    amp = traj[:, :, 0, :].abs().amax().item()
-    print(f"[wave1d_cgl] 500 steps  rel|dE|={rel:.3%}  boundary={bc:.2e}  "
-          f"max|u|={amp:.3f}")
+        ic = prob.random_ic(8, seed=123)
+        traj = prob.rollout(ic, 500)
+        E = torch.stack([prob.energy(traj[t]) for t in range(traj.shape[0])])
+        rel = (E - E[0]).abs().mean().item() / (E[0].abs().mean().item() + 1e-12)
+        bc = traj[:, :, 0, :][..., [0, -1]].abs().amax().item()
+        amp = traj[:, :, 0, :].abs().amax().item()
+        print(f"[{name}] 500 steps  rel|dE|={rel:.3%}  boundary={bc:.2e}  "
+              f"max|u|={amp:.3f}")
 
 
 if __name__ == "__main__":

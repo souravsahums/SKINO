@@ -64,7 +64,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .nd import cheb_eval_matrix, clenshaw_curtis_weights
+from .nd import cheb_eval_matrix, clenshaw_curtis_weights, kte_map
+
+WEIGHT_KINDS = ("cheb", "unif", "kte")
 
 
 class SelfAdjointChebKernel(nn.Module):
@@ -95,21 +97,38 @@ class SelfAdjointChebKernel(nn.Module):
         comparison that actually has content.
     spatial_dims:
         d in {1, 2, 3}.
+    weight_kind:
+        Overrides ``weighted`` with one of ``"cheb"``, ``"unif"`` or ``"kte"``.
+        ``"kte"`` is the quadrature of the Kosloff-Tal-Ezer stretched grid,
+        Clenshaw-Curtis times dx/dxi, so a third grid has its own matched form.
+    adjoint_eps:
+        Replaces the adjoint's channel mixing M^T by (M + eps*Delta)^T, with Delta
+        a fixed random direction rescaled to |M|.  For eps > 0 the Jacobian is
+        self-adjoint in *no* diagonal form, so this dials symplecticity down
+        continuously instead of switching which form is kept.
     """
 
     def __init__(self, n_coeff: int, c_in: int, c_out: int, rank: int,
-                 weighted: bool = True, spatial_dims: int = 1):
+                 weighted: bool = True, spatial_dims: int = 1,
+                 weight_kind: str | None = None, adjoint_eps: float = 0.0):
         super().__init__()
         if spatial_dims not in (1, 2, 3):
             raise ValueError("spatial_dims must be 1, 2, or 3")
+        kind = weight_kind or ("cheb" if weighted else "unif")
+        if kind not in WEIGHT_KINDS:
+            raise ValueError(f"weight_kind must be one of {WEIGHT_KINDS}, got {kind!r}")
         self.d = spatial_dims
         self.n_coeff = n_coeff
         self.c_in, self.c_out, self.r = c_in, c_out, rank
-        self.weighted = weighted
+        self.weight_kind = kind
+        self.weighted = kind != "unif"
+        self.adjoint_eps = float(adjoint_eps)
         scale = 1.0 / math.sqrt(n_coeff * spatial_dims)
         self.phi_coeff = nn.Parameter(torch.randn(spatial_dims, rank, n_coeff) * scale)
         self.psi_coeff = nn.Parameter(torch.randn(spatial_dims, rank, n_coeff) * scale)
         self.M = nn.Parameter(torch.randn(rank, c_out, c_in) / math.sqrt(c_in))
+        if self.adjoint_eps > 0:
+            self.register_buffer("M_delta", torch.randn(rank, c_out, c_in))
         self._cache: dict = {}
 
     def _grid(self, ns, device, dtype):
@@ -120,12 +139,20 @@ class SelfAdjointChebKernel(nn.Module):
             for n in ns:
                 Ts.append(cheb_eval_matrix(self.n_coeff, n, device=device, dtype=dtype))
                 w = clenshaw_curtis_weights(n, device=device, dtype=dtype)
-                if not self.weighted:
+                if self.weight_kind == "unif":
                     w = torch.full_like(w, 2.0 / (n + 1))  # pretend the grid is uniform
+                elif self.weight_kind == "kte":
+                    w = w * kte_map(n, device=device, dtype=dtype)[1]
                 ws.append(w)
             hit = (Ts, ws)
             self._cache[key] = hit
         return hit
+
+    def _adjoint_mixing(self) -> torch.Tensor:
+        if self.adjoint_eps <= 0:
+            return self.M
+        scale = self.M.detach().norm() / (self.M_delta.norm() + 1e-12)
+        return self.M + self.adjoint_eps * scale * self.M_delta
 
     def _basis(self, ns, device, dtype):
         Ts, ws = self._grid(ns, device, dtype)
@@ -167,7 +194,7 @@ class SelfAdjointChebKernel(nn.Module):
         ns = self._shape(g)
         phi, psi, ws = self._basis(ns, g.device, g.dtype)
         beta = self._contract(g, phi, ws)                     # <phi_r, g>_W
-        alpha = torch.einsum("roi,bor->bir", self.M, beta)    # M^T
+        alpha = torch.einsum("roi,bor->bir", self._adjoint_mixing(), beta)    # M^T
         return self._expand(alpha, psi)
 
 
@@ -175,15 +202,54 @@ class SAChebShear(nn.Module):
     """Gradient shear field  F(q) = K* rho(K q)  -- Jacobian self-adjoint in W."""
 
     def __init__(self, n_coeff: int, channels: int, hidden: int, rank: int,
-                 weighted: bool = True, spatial_dims: int = 1):
+                 weighted: bool = True, spatial_dims: int = 1,
+                 weight_kind: str | None = None, adjoint_eps: float = 0.0):
         super().__init__()
         self.K = SelfAdjointChebKernel(n_coeff, channels, hidden, rank,
-                                       weighted=weighted, spatial_dims=spatial_dims)
+                                       weighted=weighted, spatial_dims=spatial_dims,
+                                       weight_kind=weight_kind, adjoint_eps=adjoint_eps)
         self.act = nn.GELU()
         self.gain = nn.Parameter(torch.zeros(1))  # zero-init -> identity shear at t=0
 
     def forward(self, q: torch.Tensor) -> torch.Tensor:
         return self.gain * self.K.adjoint(self.act(self.K(q)))
+
+
+class PointwiseCanonical(nn.Module):
+    """A learnable canonical change of coordinates, applied identically at every node.
+
+    Three linear shears  q += A p,  p += B q,  q += C p  with A, B, C symmetric
+    (half x half) matrices.  Each is symplectic in omega_W for *any* diagonal W,
+    because it acts on channels only and so commutes with the spatial weight.
+    Wrapping a symplectic core as  T^-1 o core o T  is therefore exactly
+    symplectic end to end: the canonical analogue of a lift/projection pair.
+    Zero-initialised, so it starts as the identity.
+    """
+
+    def __init__(self, half: int, spatial_dims: int = 1):
+        super().__init__()
+        self.half = half
+        self.d = spatial_dims
+        self.raw = nn.Parameter(torch.zeros(3, half, half))
+
+    def _shear(self, x: torch.Tensor, k: int, sign: float) -> torch.Tensor:
+        S = 0.5 * (self.raw[k] + self.raw[k].t())
+        q, p = x[:, :self.half], x[:, self.half:]
+        if k == 1:
+            p = p + sign * torch.einsum("ij,bj...->bi...", S, q)
+        else:
+            q = q + sign * torch.einsum("ij,bj...->bi...", S, p)
+        return torch.cat([q, p], dim=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        for k in (0, 1, 2):
+            x = self._shear(x, k, 1.0)
+        return x
+
+    def inverse(self, x: torch.Tensor) -> torch.Tensor:
+        for k in (2, 1, 0):
+            x = self._shear(x, k, -1.0)
+        return x
 
 
 class SAChebNO(nn.Module):
@@ -204,11 +270,15 @@ class SAChebNO(nn.Module):
 
     def __init__(self, n_train: int, in_channels: int = 1, out_channels: int = 1,
                  hidden_channels: int = 16, rank: int = 8, depth: int = 4,
-                 weighted: bool = True, lift: bool = True, spatial_dims: int = 1):
+                 weighted: bool = True, lift: bool = True, spatial_dims: int = 1,
+                 weight_kind: str | None = None, adjoint_eps: float = 0.0,
+                 canonical: bool = False):
         super().__init__()
         self.d = spatial_dims
         self.lifted = lift
         conv = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[spatial_dims]
+        if canonical and lift:
+            raise ValueError("canonical=True replaces the lift, so it needs lift=False")
         if lift:
             if hidden_channels % 2:
                 hidden_channels += 1
@@ -224,9 +294,11 @@ class SAChebNO(nn.Module):
             self.half = in_channels // 2
             self.lift = nn.Identity()
             self.proj = nn.Identity()
+        self.canon = PointwiseCanonical(self.half, spatial_dims) if canonical else None
         self.shears = nn.ModuleList([
             SAChebShear(n_train + 1, self.half, max(4, rank), rank,
-                        weighted=weighted, spatial_dims=spatial_dims)
+                        weighted=weighted, spatial_dims=spatial_dims,
+                        weight_kind=weight_kind, adjoint_eps=adjoint_eps)
             for _ in range(2 * depth)])
 
     def _blocks(self, v: torch.Tensor) -> torch.Tensor:
@@ -239,4 +311,6 @@ class SAChebNO(nn.Module):
         return torch.cat([q, p], dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.canon is not None:
+            return self.canon.inverse(self._blocks(self.canon(x)))
         return self.proj(self._blocks(self.lift(x)))

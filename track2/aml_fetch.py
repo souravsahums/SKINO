@@ -14,15 +14,24 @@ work), which the account permits.
     python -m track2.aml_fetch --since 2026-09-11 --with-fields
     # download results_gpu.zip and results_gpu_fields.zip via Jupyter,
     # unzip both into track2/results_gpu/ locally
+
+    # the review experiments live in their own experiment, so no date filter:
+    python -m track2.aml_fetch --experiment skino-review --out results_review \
+        --with-fields --with-ckpt
 """
 from __future__ import annotations
 
 import argparse
 import glob
 import os
+import subprocess
+import sys
 import zipfile
 
 from .aml_config import get_ml_client
+
+JSON_PREFIXES = ("darcy_", "modes_", "speedup_", "scaling_", "discretization_",
+                 "symplectic_defect_", "longhorizon_", "best_width_", "multires_")
 
 
 def main(argv=None):
@@ -32,6 +41,10 @@ def main(argv=None):
     ap.add_argument("--datastore", default="workspaceartifactstore")
     ap.add_argument("--with-fields", action="store_true",
                     help="also download fields_*.npz / lhfields_*.npz (large) into a separate zip")
+    ap.add_argument("--with-ckpt", action="store_true",
+                    help="also download trained-model checkpoints ckpt_*.pt into a separate zip")
+    ap.add_argument("--no-analysis", action="store_true",
+                    help="skip building the review figures/tables after download")
     ap.add_argument("--since", default=None, metavar="YYYY-MM-DD",
                     help="only fetch jobs CREATED on or after this date (UTC). Artefact "
                          "names repeat across runs, so without this a twice-run "
@@ -137,13 +150,11 @@ def main(argv=None):
             base = os.path.basename(blob.name)
             is_json = base.endswith(".json") and (
                 (base.startswith("paper_") and "_sub_" in base)
-                or base.startswith(("darcy_", "modes_", "speedup_",
-                                    "scaling_", "discretization_",
-                                    "symplectic_defect_", "longhorizon_",
-                                    "best_width_")))
+                or base.startswith(JSON_PREFIXES))
             is_field = (args.with_fields and base.endswith(".npz")
                         and base.startswith(("fields_", "lhfields_")))
-            if not (is_json or is_field):
+            is_ckpt = args.with_ckpt and base.endswith(".pt") and base.startswith("ckpt_")
+            if not (is_json or is_field or is_ckpt):
                 continue
             # jobs are processed oldest-first, so an unconditional write means the
             # newest run wins any name collision
@@ -168,26 +179,40 @@ def main(argv=None):
               f"in this window; the newest job's copy was kept. e.g. {uniq[:3]}")
 
     jsons = (glob.glob(os.path.join(args.out, "paper_*_sub_*.json"))
-             + glob.glob(os.path.join(args.out, "darcy_*.json"))
-             + glob.glob(os.path.join(args.out, "modes_*.json"))
-             + glob.glob(os.path.join(args.out, "speedup_*.json"))
-             + glob.glob(os.path.join(args.out, "scaling_*.json"))
-             + glob.glob(os.path.join(args.out, "discretization_*.json"))
-             + glob.glob(os.path.join(args.out, "symplectic_defect_*.json"))
-             + glob.glob(os.path.join(args.out, "longhorizon_*.json"))
-             + glob.glob(os.path.join(args.out, "best_width_*.json")))
+             + [f for p in JSON_PREFIXES for f in glob.glob(os.path.join(args.out, p + "*.json"))])
     print(f"\ngathered {len(jsons)} per-config result JSONs into {args.out}/")
     if not jsons:
         raise SystemExit("no result JSONs found - check the artifact prefix/container printed above")
 
+    # Figures and summary tables are built here, on the instance, so the zip you
+    # download already contains them.  Needs numpy + matplotlib in this env.
+    if not args.no_analysis:
+        p = subprocess.run([sys.executable, "-m", "track2.review_analysis",
+                            "--results-dir", args.out])
+        if p.returncode != 0:
+            print("[!] figure build failed here (numpy/matplotlib missing?). The JSONs are "
+                  "complete; build the figures locally with\n"
+                  f"      python -m track2.review_analysis --results-dir track2/{args.out}")
+    extras = (glob.glob(os.path.join(args.out, "fig_*.png"))
+              + glob.glob(os.path.join(args.out, "review_summary.*")))
+
     zpath = args.out + ".zip"
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in jsons:
+        for f in jsons + extras:
             z.write(f, os.path.join(os.path.basename(args.out), os.path.basename(f)))
-    print(f"wrote {zpath} ({os.path.getsize(zpath) // 1024} KB) -> download via Jupyter, "
+    print(f"wrote {zpath} ({os.path.getsize(zpath) // 1024} KB: {len(jsons)} JSONs, "
+          f"{len(extras)} figures/tables) -> download via Jupyter, "
           f"unzip into track2/{args.out}/ on your laptop, then:\n"
           f"  python -m track2.launcher --merge --results-dir track2/{args.out}\n"
           f"  python -m track2.seed_analysis --results-dir track2/{args.out}")
+
+    if args.with_ckpt:
+        pts = glob.glob(os.path.join(args.out, "ckpt_*.pt"))
+        cz = args.out + "_ckpt.zip"
+        with zipfile.ZipFile(cz, "w", zipfile.ZIP_STORED) as z:
+            for f in pts:
+                z.write(f, os.path.join(os.path.basename(args.out), os.path.basename(f)))
+        print(f"wrote {cz} ({os.path.getsize(cz) / 1e6:.0f} MB, {len(pts)} checkpoints)")
 
     if args.with_fields:
         npzs = (glob.glob(os.path.join(args.out, "fields_*.npz"))

@@ -881,11 +881,14 @@ most important missing control in this study (\S\ref{sec:limits}).
 
 Trajectories are generated from random initial conditions with \emph{disjoint
 seed ranges} per split, so no initial condition appears in more than one split.
-Each $1$-D problem uses $384$ training trajectories over a horizon of $400$
-steps, with $12$ validation and $12$ test trajectories; the $2$-D and $3$-D
-problems use $128$ training trajectories over $200$ steps with the same
-validation and test counts. Rollout metrics are always computed on the test
-split, and are evaluated once.
+Each $1$-D problem uses $512$ training trajectories of $600$ steps and is trained
+for $15$ epochs; \texttt{wave2d} and \texttt{ns2d} use $96$ trajectories of $300$
+steps ($15$ epochs), and \texttt{wave3d} uses $48$ trajectories of $200$ steps
+($12$ epochs). Every problem has $12$ validation and $12$ test trajectories.
+The data seeds are fixed independently of the training seed, so every model and
+every seed is scored on the \emph{same} test trajectories; the three training
+seeds vary only initialisation and minibatch order. Rollout metrics are always
+computed on the test split, and are evaluated once.
 
 One caveat applies to Table~\ref{tab:winners} specifically. The best
 configuration per problem is chosen by comparing test-split rollout error across

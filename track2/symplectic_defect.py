@@ -57,23 +57,32 @@ import os
 
 import torch
 
-from ckino.nd import SeparableKernelIntegralND, clenshaw_curtis_weights
+from ckino.nd import SeparableKernelIntegralND, clenshaw_curtis_weights, kte_map
 from ckino.sacheb import SAChebShear
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RES = os.path.join(HERE, "results_paper")
+RES = os.environ.get("SKINO_RESULTS_DIR") or os.path.join(HERE, "results_paper")
 
 # Grids swept per spatial dimension.
 DEFAULT_GRIDS = {1: [16, 24, 32, 48, 64, 96], 2: [12, 16, 24, 32], 3: [6, 8, 12, 16]}
+# form name -> weight kind, and the SA-Cheb construction whose adjoint uses it
+FORMS = {"W_cheb": "cheb", "W_unif": "unif", "W_kte": "kte"}
+BUILT_IN = {"cheb": "sacheb", "unif": "sacheb_naive", "kte": "sacheb_kte"}
 
 
-def weight_tensor(ns, weighted: bool, device=None, dtype=torch.float64):
-    """Outer product of the per-axis quadrature weights -> (N1+1, ..., Nd+1)."""
+def weight_tensor(ns, weighted, device=None, dtype=torch.float64):
+    """Outer product of the per-axis quadrature weights -> (N1+1, ..., Nd+1).
+
+    ``weighted`` is True/False (Clenshaw-Curtis / constant) or a kind from FORMS.
+    """
+    kind = weighted if isinstance(weighted, str) else ("cheb" if weighted else "unif")
     ws = []
     for n in ns:
         w = clenshaw_curtis_weights(n, device=device, dtype=dtype)
-        if not weighted:
+        if kind == "unif":
             w = torch.full_like(w, 2.0 / (n + 1))
+        elif kind == "kte":
+            w = w * kte_map(n, device=device, dtype=dtype)[1]
         ws.append(w)
     W = ws[0]
     for a in range(1, len(ns)):
@@ -147,15 +156,16 @@ class _SkinoShear(torch.nn.Module):
         return self.K(q)
 
 
-def build_fields(d: int, n: int, rank: int, seed: int, device: str):
+def build_fields(d: int, n: int, rank: int, seed: int, device: str, kinds=("cheb", "unif")):
     """The constructions under test, all built from the same seed."""
     out = {}
-    for label, wt in (("sacheb", True), ("sacheb_naive", False)):
+    for kind in kinds:
         torch.manual_seed(seed)
-        f = SAChebShear(n + 1, 1, 4, rank, weighted=wt, spatial_dims=d).to(device).double()
+        f = SAChebShear(n + 1, 1, 4, rank, weight_kind=kind,
+                        spatial_dims=d).to(device).double()
         with torch.no_grad():
             f.gain.fill_(1.0)     # zero-init would make the Jacobian trivial
-        out[label] = f
+        out[BUILT_IN[kind]] = f
     torch.manual_seed(seed)
     out["skino"] = _SkinoShear(d, n, 1, rank).to(device).double()
     return out
@@ -172,44 +182,46 @@ def main(argv=None):
     ap.add_argument("--exact-max", type=int, default=4096,
                     help="use the dense Jacobian when the state has at most this many DoF")
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--forms", nargs="*", default=["W_cheb", "W_unif"], choices=list(FORMS),
+                    help="inner products to score against; each also adds its own construction")
+    ap.add_argument("--out-tag", default="", help="suffix for the output file")
     a = ap.parse_args(argv)
     os.makedirs(RES, exist_ok=True)
     dev = "cuda" if (a.device == "cuda" and torch.cuda.is_available()) else "cpu"
+    kinds = [FORMS[f] for f in a.forms]
 
     out = {"_meta": {"problem": "symplectic_defect", "dims": a.dims, "rank": a.rank,
                      "seed": a.seed, "probes": a.probes, "device": dev,
                      "metric": "||WA - A^T W||_F / ||WA||_F",
-                     "forms": ["W_cheb", "W_unif"],
-                     "note": "each model is scored against BOTH inner products"}}
-    labels = ("sacheb", "sacheb_naive", "skino")
+                     "forms": list(a.forms),
+                     "note": "each model is scored against every listed inner product"}}
+    labels = tuple(BUILT_IN[k] for k in kinds) + ("skino",)
     for d in a.dims:
         grids = a.grids or DEFAULT_GRIDS[d]
-        hdr = f"{'grid':>12} | " + " | ".join(f"{k:^27}" for k in labels)
-        print(f"\n===== {d}-D =====")
-        print(hdr)
-        print(f"{'':>12} | " + " | ".join(f"{'W_cheb':>13}{'W_unif':>14}" for _ in labels))
-        print("-" * len(hdr))
+        print(f"\n===== {d}-D =====   rows: grid; columns: model x form {list(a.forms)}")
         for n in grids:
             ns = [n] * d
             q = torch.randn(1, 1, *[m + 1 for m in ns], device=dev, dtype=torch.float64) * 0.5
             exact = q.numel() <= a.exact_max
-            fields = build_fields(d, n, a.rank, a.seed, dev)
+            fields = build_fields(d, n, a.rank, a.seed, dev, kinds)
             rec = {"_method": "dense" if exact else f"probe({a.probes})", "_dof": q.numel()}
             for label in labels:
                 rec[label] = {}
-                for form, wt in (("W_cheb", True), ("W_unif", False)):
-                    W = weight_tensor(ns, wt, device=dev)
+                for form in a.forms:
+                    W = weight_tensor(ns, FORMS[form], device=dev)
                     rec[label][form] = (defect_exact(fields[label], q, W) if exact
                                         else defect_probe(fields[label], q, W,
                                                           a.probes, a.seed))
             out[f"d{d}_n{n}"] = rec
             print(f"{str(ns):>12} | " + " | ".join(
-                f"{rec[k]['W_cheb']:>13.3e}{rec[k]['W_unif']:>14.3e}" for k in labels)
+                f"{k}: " + " ".join(f"{rec[k][f]:.2e}" for f in a.forms) for k in labels)
                 + f"   [{rec['_method']}]", flush=True)
 
-    with open(os.path.join(RES, f"symplectic_defect_s{a.seed}.json"), "w") as f:
+    suffix = f"_{a.out_tag}" if a.out_tag else ""
+    name = f"symplectic_defect{suffix}_s{a.seed}.json"
+    with open(os.path.join(RES, name), "w") as f:
         json.dump(out, f, indent=2)
-    print(f"\n[saved] symplectic_defect_s{a.seed}.json")
+    print(f"\n[saved] {name}")
     return out
 
 

@@ -173,7 +173,7 @@ class _TruncatedHead(nn.Module):
                 else:
                     q = q + sh(p)
             return torch.cat([q, p], dim=1)
-        if self.family in ("sacheb", "sacheb_naive"):
+        if self.family in ("sacheb", "sacheb_naive", "sacheb_kte", "sacheb_nores_naive"):
             return self.net._blocks(self.net.lift(x))
         # skino: lift -> symplectic blocks (skip the final projection)
         v = self.net.lift(x)
@@ -400,11 +400,28 @@ class GENERICFNO1D(nn.Module):
 # ---------------------------------------------------------------------------
 FAMILIES_1D = ("skino", "skino_strict", "skino_nosymp", "fno", "ufno", "tfno",
                "unet", "deeponet", "transformer", "sno", "generic",
-               "sacheb", "sacheb_naive", "sacheb_pure", "sacheb_pure_naive")
+               "sacheb", "sacheb_naive", "sacheb_pure", "sacheb_pure_naive",
+               "sacheb_kte", "sacheb_pure_kte", "sacheb_nores_naive", "sacheb_canon_naive")
 FAMILIES_2D = ("skino", "skino_strict", "fno", "sno",
-               "sacheb", "sacheb_naive", "sacheb_pure", "sacheb_pure_naive")
+               "sacheb", "sacheb_naive", "sacheb_pure", "sacheb_pure_naive",
+               "sacheb_nores_naive", "sacheb_canon_naive")
 FAMILIES_3D = ("skino", "skino_strict", "fno", "sno",
-               "sacheb", "sacheb_naive", "sacheb_pure", "sacheb_pure_naive")
+               "sacheb", "sacheb_naive", "sacheb_pure", "sacheb_pure_naive",
+               "sacheb_nores_naive", "sacheb_canon_naive")
+
+# Families whose deployed one-step map is the model itself rather than x + model(x).
+# The lift-free and canonically-wrapped ones must not be wrapped residually, or the
+# symplecticity they exist to demonstrate is lost; sacheb_nores_naive is the lifted
+# model stepped the same way, so the lift and the residual update can be separated.
+NONRESIDUAL_FAMILIES = ("sacheb_pure", "sacheb_pure_naive", "sacheb_pure_kte",
+                        "sacheb_canon_naive", "sacheb_nores_naive")
+# Families that act on the PDE's own (q, p) and so need a two-channel problem.
+PHASE_SPACE_FAMILIES = ("sacheb_pure", "sacheb_pure_naive", "sacheb_pure_kte",
+                        "sacheb_canon_naive")
+
+
+def is_residual(family: str) -> bool:
+    return family not in NONRESIDUAL_FAMILIES
 
 # Width knobs searched when matching a parameter budget. Ranges are wide enough
 # to span ~2k to ~2M parameters so each family can also be tuned to its own best.
@@ -453,9 +470,24 @@ _WIDTH_GRID = {
     "deeponet": [(16, 32), (24, 32), (32, 48), (48, 48), (64, 64), (96, 64),
                  (128, 96), (192, 96), (256, 128)],
 }
+# Review variants reuse their parent's grid, so budget matching stays like-for-like.
+_WIDTH_GRID["sacheb_kte"] = list(_WIDTH_GRID["sacheb"])
+_WIDTH_GRID["sacheb_nores_naive"] = list(_WIDTH_GRID["sacheb_naive"])
+_WIDTH_GRID["sacheb_pure_kte"] = list(_WIDTH_GRID["sacheb_pure"])
+_WIDTH_GRID["sacheb_canon_naive"] = list(_WIDTH_GRID["sacheb_pure_naive"])
+
+# Which inner product each SA-Cheb family takes its adjoint in.
+_WEIGHT_KIND = {
+    "sacheb": "cheb", "sacheb_pure": "cheb",
+    "sacheb_naive": "unif", "sacheb_pure_naive": "unif",
+    "sacheb_nores_naive": "unif", "sacheb_canon_naive": "unif",
+    "sacheb_kte": "kte", "sacheb_pure_kte": "kte",
+}
 
 
-def _construct(family, spatial_dims, in_c, n_channels, grid_n, dt, w, r, depth=4, lift_kind="conv"):
+def _construct(family, spatial_dims, in_c, n_channels, grid_n, dt, w, r, depth=4,
+               lift_kind="conv", model_kw=None):
+    model_kw = model_kw or {}
     n_train = min(grid_n, 64)
     if family == "skino":
         h = w + (w % 2)
@@ -488,19 +520,21 @@ def _construct(family, spatial_dims, in_c, n_channels, grid_n, dt, w, r, depth=4
     if family == "generic":
         return GENERICFNO1D(in_channels=in_c, out_channels=n_channels, hidden=w,
                             n_modes=min(r, grid_n // 2), depth=depth), w
-    if family in ("sacheb", "sacheb_naive"):
+    if family in ("sacheb", "sacheb_naive", "sacheb_kte", "sacheb_nores_naive"):
         h = w + (w % 2)
         return SAChebNO(n_train=n_train, in_channels=in_c, out_channels=n_channels,
                         hidden_channels=h, rank=r, depth=depth,
-                        weighted=(family == "sacheb"),
-                        spatial_dims=spatial_dims), h
-    if family in ("sacheb_pure", "sacheb_pure_naive"):
+                        weight_kind=_WEIGHT_KIND[family],
+                        spatial_dims=spatial_dims, **model_kw), h
+    if family in ("sacheb_pure", "sacheb_pure_naive", "sacheb_pure_kte",
+                  "sacheb_canon_naive"):
         # No lift/projection, so the map is symplectic end to end rather than
         # only inside the blocks. `w` is the depth (see _WIDTH_GRID).
         return SAChebNO(n_train=n_train, in_channels=in_c, out_channels=n_channels,
                         hidden_channels=in_c, rank=r, depth=max(1, w),
-                        weighted=(family == "sacheb_pure"), lift=False,
-                        spatial_dims=spatial_dims), in_c
+                        weight_kind=_WEIGHT_KIND[family], lift=False,
+                        canonical=(family == "sacheb_canon_naive"),
+                        spatial_dims=spatial_dims, **model_kw), in_c
     if family == "transformer":
         d = w if w % 4 == 0 else w + (4 - w % 4)
         net = TinyTransformer1D(n_grid=grid_n, channels=in_c, d_model=d,
@@ -530,7 +564,8 @@ def count_params(m: nn.Module) -> int:
 
 def build_at_width(family: str, spatial_dims: int, n_channels: int, grid_n: int,
                    dt: float, w: int, r: int, direct: bool = False,
-                   seq_len: int = 0, depth: int = 4, skino_lift: str = "conv"):
+                   seq_len: int = 0, depth: int = 4, skino_lift: str = "conv",
+                   model_kw: dict | None = None):
     """Build one model at an explicit ``(width, rank)`` setting.
 
     Returns (model, n_params). Use when sweeping a family's own capacity curve
@@ -538,7 +573,8 @@ def build_at_width(family: str, spatial_dims: int, n_channels: int, grid_n: int,
     """
     in_c = n_channels + (1 if direct else 0)
     net, hidden = _construct(family, spatial_dims, in_c, n_channels,
-                             grid_n, dt, w, r, depth, lift_kind=skino_lift)
+                             grid_n, dt, w, r, depth, lift_kind=skino_lift,
+                             model_kw=model_kw)
     if seq_len:
         net = Seq2SeqOperator(_TruncatedHead(net, family), hidden, seq_len,
                               n_channels, spatial_dims)
@@ -553,7 +589,8 @@ def width_grid(family: str):
 
 def build_matched(family: str, spatial_dims: int, n_channels: int, grid_n: int,
                   dt: float, target_params: int, direct: bool = False,
-                  seq_len: int = 0, depth: int = 4, skino_lift: str = "conv"):
+                  seq_len: int = 0, depth: int = 4, skino_lift: str = "conv",
+                  model_kw: dict | None = None):
     """Build the model whose parameter count is closest to ``target_params``.
 
     This is what makes the operator comparison fair: every family is given the
@@ -564,7 +601,8 @@ def build_matched(family: str, spatial_dims: int, n_channels: int, grid_n: int,
     for (w, r) in _WIDTH_GRID[family]:
         try:
             model, n = build_at_width(family, spatial_dims, n_channels, grid_n,
-                                      dt, w, r, direct, seq_len, depth, skino_lift)
+                                      dt, w, r, direct, seq_len, depth, skino_lift,
+                                      model_kw)
         except Exception:
             continue
         d = abs(n - target_params)

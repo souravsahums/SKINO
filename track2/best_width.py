@@ -34,14 +34,13 @@ from .data import build_data
 from .experiments_paper import (TrainConfig, hardware_info, pin_numerics,
                                 rollout_any, train_recursive_pinn, train_seq2seq)
 from .metrics import full_metrics, horizon_pair
-from .models import (FAMILIES_1D, FAMILIES_2D, FAMILIES_3D, build_at_width,
-                     width_grid)
+from .models import (FAMILIES_1D, FAMILIES_2D, FAMILIES_3D, PHASE_SPACE_FAMILIES,
+                     build_at_width, is_residual, width_grid)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results_paper")
 
-# Lift-free families are the step map themselves, so they train non-residually.
-PURE = ("sacheb_pure", "sacheb_pure_naive")
+PURE = PHASE_SPACE_FAMILIES
 
 
 def evaluate_width(fam, w, r, data, truth, args, mode, t_out, checkpoints, stride):
@@ -52,7 +51,7 @@ def evaluate_width(fam, w, r, data, truth, args, mode, t_out, checkpoints, strid
         epochs_per_k=max(round(args.epochs / 3), 1) if mode == "recursive" else args.epochs,
         stride=stride, noise_std=0.0, lambda_energy=0.0, stencil=1,
         tf_start=1.0, tf_end=0.0, batch=args.batch,
-        residual=(mode == "recursive" and fam not in PURE), seed=args.seed,
+        residual=(mode == "recursive" and is_residual(fam)), seed=args.seed,
     )
     torch.manual_seed(args.seed); random.seed(args.seed)
     sd = getattr(prob, "spatial_dims", 1)

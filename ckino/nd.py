@@ -74,6 +74,26 @@ def clenshaw_curtis_weights(n: int, device=None, dtype=torch.float32) -> torch.T
     return w
 
 
+# Kosloff-Tal-Ezer stretching of the CGL nodes, x = arcsin(alpha xi) / arcsin(alpha).
+# alpha=0.995 puts the true quadrature roughly as far from Clenshaw-Curtis as from
+# constant weights, so neither standard form is the matched one on this grid.
+KTE_ALPHA = 0.995
+
+
+def kte_map(n: int, alpha: float = KTE_ALPHA, device=None, dtype=torch.float32):
+    """Mapped nodes x_j and the Jacobian dx/dxi at the (n + 1) CGL points xi_j.
+
+    The quadrature for a function sampled at x_j is then  w_j = (dx/dxi)_j * cc_j,
+    with cc the Clenshaw-Curtis weights in the computational coordinate.
+    """
+    j = torch.arange(n + 1, device=device, dtype=dtype)
+    xi = torch.cos(math.pi * j / n)
+    s = math.asin(alpha)
+    x = torch.asin(alpha * xi) / s
+    jac = alpha / (s * torch.sqrt(1.0 - (alpha * xi) ** 2))
+    return x, jac
+
+
 # ---------------------------------------------------------------------------
 # Resolution-agnostic separable kernel-integral operator (any spatial dim).
 # ---------------------------------------------------------------------------
