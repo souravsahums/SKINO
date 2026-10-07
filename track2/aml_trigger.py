@@ -257,7 +257,11 @@ def review_jobs(parts=REVIEW_PARTS, grid_seeds=(0, 1, 2, 3, 4), extra_seeds=(3, 
                         "W_unif W_kte --out-tag forms3 --device cuda --seed 0")
                 est += 120
             jobs.append((f"review-multires-s{s}", cmd, est))
-    return [(n, c + _COLLECT, e + _JOB_STARTUP_S) for n, c, e in jobs]
+    # The node's copy of the code snapshot is wiped of results first: the launcher
+    # skips any run whose JSON already exists, so a stale file uploaded with the
+    # code would otherwise be shipped back as if it were a new result.
+    clean = "rm -rf track2/results_paper ; mkdir -p track2/results_paper ; "
+    return [(n, clean + c + _COLLECT, e + _JOB_STARTUP_S) for n, c, e in jobs]
 
 
 def makespan(seconds, nodes):
