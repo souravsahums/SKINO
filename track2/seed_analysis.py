@@ -25,6 +25,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter, LogLocator, NullLocator
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results_paper")
@@ -192,15 +193,34 @@ def rollout_figure(data, out_dir=RES):
     print("wrote", out)
 
 
-def figure(data, out_dir=RES, top_n=12, ncols=3):
+_FAMILY = {
+    "skino": "CKINO", "strict": "CKINO-strict", "nosymp": "CKINO-nosymp",
+    "fno": "FNO", "ufno": "U-FNO", "tfno": "T-FNO", "unet": "U-Net",
+    "deeponet": "DeepONet", "transformer": "Transformer", "sno": "SNO",
+    "generic": "GENERIC-FNO", "sacheb": "SA-Cheb Wc", "naive": "SA-Cheb Wu",
+    "purecheb": "SA-Cheb lift-free Wc", "pureunif": "SA-Cheb lift-free Wu",
+    "kte": "SA-Cheb Wkte", "purekte": "SA-Cheb lift-free Wkte",
+}
+_MODE = {"plain": "recursive", "noise": "recursive, 2% noise",
+         "pinn": "recursive, PDE loss", "seq2seq": "seq2seq", "direct": "direct"}
+
+
+def pretty(name: str) -> str:
+    """Config key -> label a reader of the paper can decode (family, then mode)."""
+    fam, _, mode = name.rpartition("_")
+    return f"{_FAMILY.get(fam, fam)}, {_MODE.get(mode, mode)}" if fam else name
+
+
+def figure(data, out_dir=RES, top_n=10, ncols=2, fname="fig_multiseed.png"):
     """Best `top_n` configurations per problem, on a `ncols`-wide grid.
 
-    One row of nine panels renders the config labels illegible at page width.
+    Drawn at its printed size (about 7 in wide), so that the labels stay legible
+    when the figure is placed at text width.
     """
     probs = [p for p in ORDER if any(k[0] == p for k in data)]
     names = sorted({k[1] for k in data})
     nrows = -(-len(probs) // ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(4.7 * ncols, 3.5 * nrows),
+    fig, axes = plt.subplots(nrows, ncols, figsize=(7.4, 1.62 * nrows + 0.5),
                              squeeze=False)
     flat = axes.ravel()
     for ax, prob in zip(flat, probs):
@@ -213,20 +233,25 @@ def figure(data, out_dir=RES, top_n=12, ncols=3):
         ax.barh(range(len(sub)), ys, xerr=es, color="#4c78a8", edgecolor="k",
                 capsize=2.5, height=0.72)
         ax.set_yticks(range(len(sub)))
-        ax.set_yticklabels([n for n, _ in sub], fontsize=8)
+        ax.set_yticklabels([pretty(n) for n, _ in sub], fontsize=6.3)
         ax.set_xscale("log"); ax.invert_yaxis()
-        ax.set_xlabel(f"rel. RMS @ t={CP}", fontsize=8)
-        ax.tick_params(axis="x", labelsize=8)
-        ax.set_title(f"{prob}   (best {len(sub)} of {n_all})",
-                     fontweight="bold", fontsize=10)
+        # one label per 1-2-5 step, plain numbers; no minor labels (they collide)
+        lo, hi = ax.get_xlim()
+        subs = (1.0, 3.0) if hi / lo > 30 else (1.0, 2.0, 5.0)
+        ax.xaxis.set_major_locator(LogLocator(base=10, subs=subs, numticks=20))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+        ax.xaxis.set_minor_locator(NullLocator())
+        ax.set_xlabel(f"relative RMS at step {CP}", fontsize=6.5)
+        ax.tick_params(axis="x", labelsize=6.3)
+        title = {"kdv": "kdv (linear, as generated)"}.get(prob, prob)
+        ax.set_title(f"{title}\nbest {len(sub)} of {n_all}",
+                     fontweight="bold", fontsize=7.2)
         ax.grid(alpha=0.3, axis="x", which="both")
     for ax in flat[len(probs):]:
         ax.axis("off")
-    fig.suptitle("Multi-seed rollout accuracy (mean +/- std over 3 seeds)",
-                 fontweight="bold")
-    fig.tight_layout()
-    out = os.path.join(out_dir, "fig_multiseed.png")
-    fig.savefig(out, dpi=150); plt.close(fig)
+    fig.tight_layout(h_pad=0.9, w_pad=0.4)
+    out = os.path.join(out_dir, fname)
+    fig.savefig(out, dpi=300); plt.close(fig)
     print("wrote", out)
 
 

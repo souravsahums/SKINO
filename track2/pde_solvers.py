@@ -248,20 +248,24 @@ class WaveDirichletProblem:
 # ---------------------------------------------------------------------------
 @dataclass
 class KdVProblem:
-    """1-D KdV in the form actually integrated here:  u_t + 6 u u_x - u_xxx = 0
+    """LEGACY ``kdv`` benchmark problem.  READ THIS BEFORE USING IT AS "KdV".
 
-    This is the x -> -x mirror of the textbook  u_t + 6 u u_x + u_xxx = 0;
-    both are integrable KdV equations. The dispersion sign was verified
-    numerically against the solver's own one-step increment (rel. err 0.03 for
-    the -u_xxx form vs 2.0 for +u_xxx). To switch to the textbook +u_xxx
-    convention, flip ``Lhat`` to ``+1j * k**3``.
+    The step below is meant to be ETD-RK2 for  u_t = u_xxx - 6 u u_x.  Its
+    update lines multiply the nonlinear terms by ``dt`` a second time
+    (``phi1 * dt * Nu`` and ``phi2 * dt * (Na - Nu)``), although ``phi1`` and
+    ``phi2`` already contain the step.  The nonlinearity is therefore scaled by
+    the micro-step (1e-4) and the stored ``kdv`` trajectories are those of the
+    LINEAR dispersive equation  u_t = u_xxx  (measured: relative L2 distance to
+    the exact Fourier solution exp(-i k^3 t) is 1e-6 after one stored step and
+    2e-4 after 200; distance to a correct nonlinear integration 1e-2 and 0.43).
+    The earlier "one-step increment check" that confirmed the dispersion sign
+    was the missing nonlinearity (3% of the increment), not a verification.
 
-    Non-canonical Hamiltonian PDE. Conserved invariants (confirmed in the
-    self-test): mass ∫u, momentum ∫u^2/2, energy ∫(u_x^2 - 2u^3). Ground truth
-    via ETD-RK2 (Cox-Matthews 2002).
-
-    Nonlinear -> a sterner test of whether the Track-2 recipe generalises past
-    the linear wave equation.
+    This class is kept unchanged so that the stored ``kdv`` results stay
+    reproducible; use ``kdv_nl`` (:class:`KdVNonlinearProblem`) for the actual
+    Korteweg-de Vries equation  u_t + 6 u u_x - u_xxx = 0  (the x -> -x mirror of
+    the textbook form).  ``energy`` below is the textbook-sign functional
+    ∫(u_x^2 - 2u^3), which is NOT conserved by either flow here.
     """
 
     name: str = "kdv"
@@ -327,6 +331,48 @@ class KdVProblem:
             s = self.true_step(s)
             traj.append(s.clone())
         return torch.stack(traj, dim=0)
+
+
+@dataclass
+class KdVNonlinearProblem(KdVProblem):
+    """Korteweg-de Vries  u_t + 6 u u_x - u_xxx = 0  with a correct ETD-RK2 step.
+
+    Same grid, step and initial conditions as the legacy ``kdv`` problem, but the
+    nonlinear terms are not multiplied by ``dt`` a second time.  Conserved
+    invariants: mass ∫u, momentum ∫u^2/2 and energy ∫(u_x^2 + 2u^3) (the sign
+    for this dispersion convention; relative drift 9e-6 over 100 stored steps
+    in the self-test).
+    """
+
+    name: str = "kdv_nl"
+
+    def true_step(self, state: torch.Tensor) -> torch.Tensor:
+        u = state[:, 0, :]
+        n = u.shape[-1]
+        k = self._k(n, u.device)
+        Lhat = -1j * (k ** 3)
+        h = self.dt / self.n_inner
+        eL = torch.exp(Lhat * h)
+        Lsafe = torch.where(Lhat.abs() < 1e-8, torch.full_like(Lhat, 1e-8 + 0j), Lhat)
+        f1 = (eL - 1.0) / Lsafe                      # = h * phi1(h L)
+        f2 = (eL - 1.0 - Lhat * h) / (Lsafe ** 2 * h)  # = h * phi2(h L)
+        for _ in range(self.n_inner):
+            uh = torch.fft.fft(u, dim=-1)
+            Nu = -3j * k * torch.fft.fft(u ** 2, dim=-1)
+            ah = eL * uh + f1 * Nu
+            a = torch.fft.ifft(ah, dim=-1).real
+            Na = -3j * k * torch.fft.fft(a ** 2, dim=-1)
+            uh = ah + f2 * (Na - Nu)
+            u = torch.fft.ifft(uh, dim=-1).real
+        return u.unsqueeze(1)
+
+    def energy(self, state: torch.Tensor) -> torch.Tensor:
+        """Conserved functional ∫(u_x^2 + 2 u^3) dx for u_t + 6 u u_x - u_xxx = 0."""
+        u = state[..., 0, :]
+        n = u.shape[-1]
+        k = self._k(n, u.device)
+        ux = torch.fft.ifft(1j * k * torch.fft.fft(u, dim=-1), dim=-1).real
+        return ((ux ** 2).sum(-1) + 2.0 * (u ** 3).sum(-1)) * (self.length / n)
 
 
 # ---------------------------------------------------------------------------
@@ -680,7 +726,8 @@ PROBLEMS = {
     "wave1d_cgl": WaveCGLProblem,
     "wave1d_kte": WaveKTEProblem,
     "burgers": BurgersProblem,
-    "kdv": KdVProblem,
+    "kdv": KdVProblem,          # legacy: linear dispersive as generated (see its docstring)
+    "kdv_nl": KdVNonlinearProblem,
 }
 
 # Difficulty ordering used for the generalisation table in the paper.
@@ -1017,8 +1064,33 @@ def get_problem(name: str, **kwargs):
 # anti-aliased resampling round-trips a band-limited field. Run:
 #     python -m track2.pde_solvers
 # ---------------------------------------------------------------------------
+def _kdv_selftest() -> None:
+    """The legacy ``kdv`` is the linear flow; ``kdv_nl`` is nonlinear and conserves its energy."""
+    prob, nl = get_problem("kdv"), get_problem("kdv_nl")
+    u0 = prob.random_ic(8, seed=123).double()
+    k = prob._k(prob.grid_n, u0.device)
+    s_old, s_new = u0.clone(), u0.clone()
+    for _ in range(100):
+        s_old, s_new = prob.true_step(s_old), nl.true_step(s_new)
+    t = 100 * prob.dt
+    lin = torch.fft.ifft(torch.exp(-1j * k ** 3 * t) * torch.fft.fft(u0[:, 0, :], dim=-1), dim=-1).real
+
+    def rel(a, b):
+        return ((a - b).norm(dim=-1) / b.norm(dim=-1)).max().item()
+
+    d_lin_old, d_lin_new = rel(s_old[:, 0, :], lin), rel(s_new[:, 0, :], lin)
+    e0, e1 = nl.energy(u0), nl.energy(s_new)
+    drift = ((e1 - e0).abs() / e0.abs()).max().item()
+    print(f"  kdv    : rel. distance to the exact LINEAR flow after 100 steps = {d_lin_old:.2e}")
+    print(f"  kdv_nl : rel. distance to the exact LINEAR flow after 100 steps = {d_lin_new:.2e}; "
+          f"energy drift = {drift:.2e}")
+    assert d_lin_old < 1e-3 and d_lin_new > 1e-2, "legacy kdv should be linear, kdv_nl should not be"
+    assert drift < 1e-4, "kdv_nl energy drift too large"
+
+
 def _selftest() -> None:
     torch.manual_seed(0)
+    _kdv_selftest()
     for name in ("wave1d", "kdv"):
         prob = get_problem(name)
         ic = prob.random_ic(8, seed=123)

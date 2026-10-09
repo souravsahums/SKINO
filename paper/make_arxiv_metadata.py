@@ -7,7 +7,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 ap = argparse.ArgumentParser()
 ap.add_argument("--out", default="arxiv", help="folder holding the package (default: arxiv)")
-_out = ap.parse_args().out
+ap.add_argument("--code-url", default="", help="public URL of the code repository; omitted from the "
+                "Comments field when not given, so that no dead link is advertised")
+_args = ap.parse_args()
+_out = _args.out
 OUT = _out if os.path.isabs(_out) else os.path.join(ROOT, _out)
 os.makedirs(OUT, exist_ok=True)
 tex = open(os.path.join(HERE, "weight_of_the_adjoint.tex"), encoding="utf-8").read()
@@ -45,6 +48,7 @@ m = (re.search(r"Output written.*?\((\d+) pages", open(log_path, encoding="latin
      if os.path.exists(log_path) else None)
 n_pages = m.group(1) if m else "?"
 
+code_line = f" Code: {_args.code_url}" if _args.code_url else ""
 meta = f"""arXiv submission metadata -- paste these into the web form
 =========================================================
 
@@ -66,8 +70,7 @@ math.NA  (Numerical Analysis)
 physics.comp-ph  (Computational Physics)
 
 COMMENTS
-{n_pages} pages, {n_fig} figures, {n_tab} tables. Code, full result set and figure generators:
-https://github.com/souravsahums/SKINO
+{n_pages} pages, {n_fig} figures, {n_tab} tables.{code_line}
 
 LICENSE  (recommended)
 CC BY 4.0 -- arXiv.org perpetual non-exclusive license is the minimum, but

@@ -4,8 +4,6 @@ Paper: *The Weight of the Adjoint: Which Symplectic Form a Neural Operator
 Preserves, and Whether It Survives the Lift*
 
 Everything you need is in this `arxiv_updated_2026-10-09/` folder. Work top to bottom.
-It was built after the follow-up experiments; the previous package is kept
-unchanged in `arxiv/` as a backup, and nothing below touches it.
 
 | File | What it is |
 | --- | --- |
@@ -85,7 +83,7 @@ preflight
   ok    figure formats ['.png'] suit pdflatex
   ok    bibliography is inline (thebibliography); no .bbl needed
 compiling in isolation (pdflatex x3)
-  ok    38 pages, 0 undefined reference(s)
+  ok    41 pages, 0 undefined reference(s)
 ...
 PACKAGE READY
 ```
@@ -128,7 +126,7 @@ submission if you get confused — use the back navigation, or unsubmit later
 ## Step 3 — Upload and file check
 
 1. On the **Prepare Files** stage, choose **Upload a compressed archive**.
-2. Select `arxiv_updated_2026-10-09\arxiv_weight_of_the_adjoint.zip` (2.05 MB — far under the
+2. Select `arxiv_updated_2026-10-09\arxiv_weight_of_the_adjoint.zip` (2.32 MB — far under the
    50 MB limit, so no size exception is needed).
 3. Click **Check Files**.
 
@@ -166,7 +164,7 @@ This is the step people skip and regret.
 2. Click **View PDF** / **Preview**. **You cannot complete the submission
    without doing this, and you should not want to.**
 3. Compare the preview against `arxiv_updated_2026-10-09/reference_build.pdf`, specifically:
-   - 38 pages.
+   - 41 pages.
    - The three TikZ architecture diagrams (Figures 2, 3, 4) render — TikZ is
      the most version-sensitive thing in the document.
    - All twelve PNG plots appear and are not stranded past the references.
@@ -186,10 +184,10 @@ Open `arxiv_updated_2026-10-09/metadata.txt` and paste field by field.
 | --- | --- |
 | **Title** | The Weight of the Adjoint: Which Symplectic Form a Neural Operator Preserves, and Whether It Survives the Lift |
 | **Authors** | `Sourav Sahu, Gareth O'Brien` |
-| **Abstract** | Paste from `arxiv_updated_2026-10-09/abstract.txt` (1571 chars; the cap is 1920) |
+| **Abstract** | Paste from `arxiv_updated_2026-10-09/abstract.txt` (1615 chars; the cap is 1920) |
 | **Primary category** | `cs.LG` — Machine Learning |
 | **Cross-list** | `math.NA` — Numerical Analysis; `physics.comp-ph` — Computational Physics |
-| **Comments** | `38 pages, 15 figures, 15 tables. Code, full result set and figure generators: https://github.com/souravsahums/SKINO` |
+| **Comments** | `41 pages, 15 figures, 16 tables.` Add a line `Code: <URL>` only once the code repository is public (the SKINO repository returned 404 to an anonymous visitor when this package was built, so a link to it would be dead) |
 | **Report number** | leave blank |
 | **Journal ref / DOI** | leave blank — these are added *after* publication, without creating a new version |
 | **MSC class** (optional) | `65M99, 68T07, 37K05` |
@@ -264,8 +262,8 @@ a version stamp, but they **irrevocably delay announcement** to the next cycle.
 they are overwritten, not merged. For example:
 
 ```
-38 pages, 15 figures, 15 tables; added the reverse-direction and long-horizon control experiments.
-Code: https://github.com/souravsahums/SKINO
+41 pages, 15 figures, 16 tables; corrected typos in Section 5, added references.
+Code: <URL of the public repository, if any>
 ```
 
 Do **not** withdraw a paper because it was updated or published — use Replace
@@ -299,12 +297,12 @@ revisions stop appearing in the daily mailings.
 | Item | Value |
 | --- | --- |
 | Upload | `arxiv_updated_2026-10-09/arxiv_weight_of_the_adjoint.zip` |
-| Size | 2.05 MB (limit 50 MB) |
+| Size | 2.32 MB (limit 50 MB) |
 | Contents | 1 `.tex` + 12 PNGs in `figs/` |
 | Top-level file | `weight_of_the_adjoint.tex` |
 | Processor | pdflatex (auto-detected) |
 | `.bbl` needed | No — inline `thebibliography` |
-| Pages | 38 |
+| Pages | 41 |
 | Primary / cross-list | `cs.LG` / `math.NA`, `physics.comp-ph` |
 | License | CC BY 4.0 |
 | Rebuild command | `python paper\make_arxiv.py --out arxiv_updated_2026-10-09` |
