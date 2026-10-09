@@ -75,30 +75,25 @@ and Whether It Survives the Lift}
 Structure-preserving neural operators are built on a question that is usually
 left unasked: symplectic \emph{with respect to which inner product}? On a
 non-uniform grid the discrete $L^2$ adjoint is $K^{*}=W^{-1}K^{\top}W$, where
-$W$ collects the quadrature weights, and the choice of $W$ silently selects
-which symplectic form a gradient shear preserves. We make that choice explicit,
-build both alternatives, and measure them. Using the symplectic defect
-$\lVert WA-A^{\top}W\rVert_F/\lVert WA\rVert_F$ computed from the autograd
-Jacobian, we find a clean diagonal across $1$-D, $2$-D and $3$-D: each
-construction is exact ($2\times10^{-16}$) in the form its adjoint was built from
-and $O(1)$ away from the other. Preserving \emph{a} symplectic form is therefore
-cheap; the content lies in preserving the \emph{right} one. On our
-benchmarks, all sampled on uniform grids, the variant whose form matches the grid
-has the lower error in $16$ of $18$ paired comparisons, and in all $4$ when the
-lift and projection are removed so that the deployed map itself is symplectic,
-by $14$--$22\times$ on three of them. The reverse direction, data on Chebyshev
-nodes, is untested. Over a $2\times10^{4}$-step rollout ($100$--$200$
-domain transits) the matched-form lift-free operator is the only one of nine
-families that stays bounded in every run ($12$ of $12$); symplectic cores inside
-the conventional lift--project--residual wrapper do so in at most $4$, and the
-mismatched-form lift-free operator, though exactly symplectic, diverges in
-$3$-D. Bounded is not accurate: at that horizon its error is comparable to the
-signal and its energy is off by $126$--$625\%$, against $0.03\%$ for the
-reference solver. In these experiments structure preservation buys reliability
-rather than accuracy, and only end to end in the matched form; it is not the
-cost a prior version of this study reported. We also report a $783$-run
-benchmark, and retract an earlier symplecticity theorem of ours that conflated
-unit Jacobian determinant with preservation of $\omega$.
+$W$ holds the quadrature weights, and the choice of $W$ selects which
+symplectic form a gradient shear preserves. We make the choice explicit and
+measure it. The symplectic defect, computed from the autograd Jacobian, is exact
+($4\times10^{-16}$) in the form a shear was built from and $O(1)$ in the others,
+in $1$-D, $2$-D and $3$-D. Does matching the form to the grid help? On uniform
+grids the matched form has the lower error in $17$ of $22$ paired comparisons
+over five seeds, and none favours the other. On Chebyshev nodes, where the roles
+reverse, it is better in two of three comparisons and tied in the third; on a
+mapped grid where neither standard form is right it brings no consistent
+benefit. Because the weights also set the kernel's quadrature, the experiments
+cannot separate the form from the quadrature rule. Over $2\times10^{4}$-step
+rollouts, end-to-end symplectic maps stayed bounded in $60$ of $63$ runs (the
+exceptions: one mismatched-form model in $3$-D), while a lifted variant with a
+non-symplectic linear lift and projection was bounded in $3$ of $12$. Bounded is
+not accurate: an identity map is bounded too, the error is comparable to the
+signal, and energy is off by over $100\%$, against $0.03\%$ for the reference
+solver. We also report a $783$-run benchmark, and retract an earlier
+symplecticity theorem of ours that conflated unit Jacobian determinant with
+preservation of $\omega$.
 \end{abstract}
 
 % ============================================================================
@@ -133,7 +128,7 @@ questions:
 \item[RQ1.] Does each construction preserve the form it claims, and only that
 one? (\S\ref{sec:form})
 \item[RQ2.] Does matching the form to the discretisation of the data improve
-prediction? (\S\ref{sec:ablation})
+prediction, on uniform, Chebyshev and mapped grids? (\S\ref{sec:ablation})
 \item[RQ3.] Does the guarantee survive the lift, projection and residual update
 that conventionally wrap the core, and what does end-to-end symplecticity buy
 over a long rollout? (\S\ref{sec:long})
@@ -160,21 +155,30 @@ and $3$-D, for any linear kernel and any continuously differentiable activation
 of component by component.
 
 \item \textbf{The form result} (RQ1 and RQ2). Each variant is exact in its own
-form and $O(1)$ in the other. On uniform-grid data the matched-form variant has
-the lower mean error in $16$ of $18$ lifted pairs ($15$ of them in every seed),
-and in all $4$ lift-free pairs, by $14$--$22\times$ on three and $1.24\times$ on
-the fourth. Only one direction of the matching hypothesis is tested so far.
+form and $O(1)$ in the others. On uniform grids the matched form has the lower
+error in $17$ of $22$ paired comparisons over five seeds ($16$ of them in every
+seed) and none favours the other form; on Chebyshev nodes the preference
+reverses in two of three comparisons and ties in the third; on a mapped grid
+where neither standard form is the quadrature it brings no consistent benefit.
+The weights also set the quadrature of the kernel integral, so the form cannot
+be separated from the quadrature rule.
 
-\item \textbf{The end-to-end result} (RQ3). Over $2\times10^{4}$ steps the
-matched-form operator that is symplectic end to end stays bounded in all $12$
-runs (four wave problems, three seeds); the same construction in the mismatched
-form in $9$; symplectic cores inside the conventional wrapper in at most $4$;
-non-symplectic operators in at most $1$. Bounded is not accurate: at that
-horizon its error is comparable to the signal and its energy is not conserved.
+\item \textbf{The end-to-end result} (RQ3). Over $2\times10^{4}$ steps
+end-to-end symplectic maps stayed bounded in $60$ of $63$ runs, the exceptions
+being the mismatched-form model in $3$-D; a lifted variant with a
+non-symplectic linear lift and projection was bounded in $3$ of $12$. Controls
+temper the reading: an identity map is bounded too, an untrained symplectic map
+diverges, and a $1$--$10\%$ perturbation of the adjoint is still bounded.
+Boundedness tracked the spectral radius of the one-step Jacobian. Bounded is not
+accurate: at that horizon the error is comparable to the signal and energy is
+not conserved.
 
 \item \textbf{A benchmark} (\S\ref{sec:setup}, \S\ref{sec:bench}): $783$ runs
-over nine equations in $1$-D/$2$-D/$3$-D at matched parameter count, three seeds,
-plus an unconstrained-capacity sweep showing the ranking is budget-dependent.
+over nine equations in $1$-D/$2$-D/$3$-D at matched parameter count, three
+seeds, plus an unconstrained-capacity sweep showing the ranking is
+budget-dependent, and a follow-up of $338$ further training runs (two more
+seeds for the headline pairs, two new grids, long-horizon controls and a
+multi-resolution test).
 \end{enumerate}
 
 \paragraph{A correction.} An earlier version of this study reported that exact
@@ -375,9 +379,12 @@ described as symplectic turns out not to be; we exhibit an instance of our own i
 \begin{remark}[The question is under-specified]
 \label{rem:illposed}
 Because \eqref{eq:defect-identity} depends on $W$, ``is this block symplectic?''
-has no answer until $W$ is named. Two implementations differing only in the $W$
-used inside the adjoint are \emph{both} exactly symplectic, in different forms.
-This is the observation the rest of the paper develops.
+has no answer until $W$ is named. Two shears built with the adjoint taken in
+different $W$ are \emph{both} exactly symplectic, in different forms. This is
+the observation the rest of the paper develops. (In our implementation $W$
+also enters the kernel $K$ itself, as its quadrature; the theorem holds for any
+$K$, so this does not affect it, but it matters for what the experiments can
+separate, \S\ref{sec:sacheb-arch}.)
 \end{remark}
 
 \subsection{A gradient shear that is exact in a chosen form}
@@ -440,11 +447,11 @@ The block alternates
   {$q'=q$\\[1pt] shear is symplectic in $\omega_W$};
 \end{tikzpicture}
 \caption{The \sacheb{} gradient shear, drawn for one channel (in general
-$K^{*}=W_{\mathrm{in}}^{-1}K^{\top}W_{\mathrm{out}}$). The only design choice is
-which $W$ enters $K^{*}$: the Clenshaw--Curtis weights ($\Wc$) or constant
-weights ($\Wu$). Both give an \emph{exactly} symplectic block, in different
-forms. That choice, not the presence of symplecticity, is what the experiments
-vary.}
+$K^{*}=W_{\mathrm{in}}^{-1}K^{\top}W_{\mathrm{out}}$). The design choice is which
+weights $W$ define the quadrature inside $K$ and the adjoint $K^{*}$: the
+Clenshaw--Curtis weights ($\Wc$) or constant weights ($\Wu$). Both give an
+\emph{exactly} symplectic block, in different forms. That choice, not the
+presence of symplecticity, is what the experiments vary.}
 \label{fig:sacheb}
 \end{figure}
 
@@ -782,7 +789,17 @@ identity map.
 Theorem~\ref{thm:sacheb} therefore applies to every block. The lifted variants
 add a pointwise linear lift and projection (a $1\times1$ convolution) and a
 residual update; the lift-free variants add nothing (\S\ref{sec:lift}). The two
-forms differ only in which $W$ enters $K^{*}$, and it enters nowhere else.
+forms differ in the weight $W$, and $W$ enters twice: as the quadrature of the
+kernel integral inside $K$, $Kv=\sum_r\varphi_rM_r\iprod{\psi_r}{v}_W$, and,
+through the same inner product, in $K^{*}$. With identical parameters the two
+forms therefore give different forward maps (a $26\%$ relative difference on a
+random input at $N=16$), while $K^{*}=W^{-1}K^{\top}W$ holds to $10^{-16}$ in
+each. Theorem~\ref{thm:sacheb} holds for every $K$, so it is unaffected; what
+changes is what the experiments can separate. Changing the form also changes the
+quadrature rule of the kernel integral, so a model that does better with one
+form may owe it to either, and we cannot tell which (\S\ref{sec:limits}). A
+control that decouples them, with the kernel quadrature in one weight and the
+adjoint taken in the other, is straightforward to build; we have not run it.
 
 \subsection{Lifted versus lift-free, and why it matters}
 \label{sec:lift}
@@ -851,6 +868,10 @@ variant & symplectic in & role \\
 \texttt{sacheb\_naive} & $\Wu$ (core only) & identical but uniform-form: isolates \emph{which} form \\
 \texttt{sacheb\_pure} & $\Wc$ (end to end) & removes the lift: isolates \emph{where} the guarantee holds \\
 \texttt{sacheb\_pure\_naive} & $\Wu$ (end to end) & both controls at once; the matched-form, fully-guaranteed operator \\
+\texttt{sacheb\_kte}, \texttt{sacheb\_pure\_kte} & $W_{\mathrm{kte}}$ (core only, end to end) & mapped-grid form (\S\ref{sec:followup}) \\
+\texttt{sacheb\_nores\_naive} & $\Wu$ (core only) & lifted without the residual update: separates the residual from the lift \\
+\texttt{sacheb\_canon\_naive} & $\Wu$ (end to end) & the core inside a canonical symplectic wrapper \\
+persistence & any form & the identity map $x\mapsto x$: bounded, no dynamics \\
 \ckino{} & neither & the non-gradient kernel; volume-preserving only \\
 \ckino{}-strict & neither & exactly-constrained variant of \ckino{} \\
 \ckino{}-nosymp & n/a & structure removed: isolates the block's contribution \\
@@ -1015,21 +1036,20 @@ a legitimate inner product, the quadrature of $\int fg\,\pi\sin(\pi s)\,ds$, but
 not the physical one: it weights the middle of the domain up to $\approx\pi N$
 times more than the ends.
 
-\emph{Where do the two forms enter?} At exactly one place, the adjoint
-$K^{*}=W^{-1}K^{\top}W$ of \eqref{eq:adjoint}. The basis, rank, channel mixing,
-initialisation and inputs are identical.
+\emph{Where do the two forms enter?} In the quadrature $\iprod{\psi_r}{v}_W$ of the
+kernel integral and, through the same inner product, in the adjoint
+$K^{*}=W^{-1}K^{\top}W$ of \eqref{eq:adjoint} (\S\ref{sec:sacheb-arch}). The basis,
+rank, channel mixing, initialisation and inputs are identical.
 
-The consequence is worth stating bluntly, since it bounds what the experiments
-can establish. Because every physical grid is uniform, $\Wu$ is the matched form
-throughout and $\Wc$ is the mismatched one throughout. The ablation of
-\S\ref{sec:ablation} therefore tests the matching hypothesis in one direction
-only. It shows that the mismatched form loses; it cannot by itself separate
-``matching the form to the grid is what matters'' from ``constant weights are
-simply the better choice''. Distinguishing those requires a dataset genuinely
-sampled on CGL nodes, where $\Wc$ becomes the matched form and the preference
-should reverse. That experiment is implemented but has not yet been run, and we
-regard it as the single most important missing control in this study
-(\S\ref{sec:limits}).
+The consequence is worth stating, since it bounds what the nine-problem
+experiments can establish. Because every one of these grids is uniform, $\Wu$ is
+the matched form throughout and $\Wc$ the mismatched one throughout, so they
+test the matching hypothesis in one direction only: they cannot by themselves
+separate ``matching the form to the grid is what matters'' from ``constant
+weights are simply the better choice''. Two further Hamiltonian problems
+(\S\ref{sec:followup}), one sampled on CGL nodes where $\Wc$ is the matched form
+and one on a mapped grid where neither standard form is, test the other
+directions.
 
 \subsection{Data, splits and selection}
 \label{sec:splits}
@@ -1039,7 +1059,8 @@ seed ranges} per split, so no initial condition appears in more than one split.
 Each $1$-D problem uses $512$ training trajectories of $600$ steps and is trained
 for $15$ epochs; \texttt{wave2d} and \texttt{ns2d} use $96$ trajectories of $300$
 steps ($15$ epochs), and \texttt{wave3d} uses $48$ trajectories of $200$ steps
-($12$ epochs). Every problem has $12$ validation and $12$ test trajectories.
+($12$ epochs). In the first round every problem has $12$ validation and $12$ test
+trajectories.
 The data seeds are fixed independently of the training seed, so every model and
 every seed is scored on the \emph{same} test trajectories; the three training
 seeds vary only initialisation and minibatch order. Rollout metrics are always
@@ -1064,7 +1085,8 @@ Families are crossed with prediction mode
 $\{$recursive, non-recursive \texttt{seq2seq}$\}$, training noise
 $\{$none, $2\%\}$ and an optional PDE-residual loss, giving $33$ configurations
 in $1$-D and $21$ in $2$-D/$3$-D, all matched to $\approx$25k parameters. Three
-seeds on a single hardware (NVIDIA Tesla T4): \textbf{783 training runs}.
+seeds on a single hardware (NVIDIA Tesla T4): \textbf{783 training runs}. The
+follow-up of \S\ref{sec:followup} adds $338$.
 
 Parameter count is the matching criterion, and it is the weakest of the
 available ones. The families compared here have very different arithmetic
@@ -1085,12 +1107,79 @@ pattern correlation, spectral error and invariant drift, collapsed into a
 and amplitude ratio in $[0.7,1.4]$). A model can post a middling RMS while being
 physically dead, and only the decomposition separates the two. For the
 long-horizon rollouts of \S\ref{sec:long} we report four of these separately,
-each averaged over the $12$ test trajectories: relative RMS against the
+each averaged over the $8$ test trajectories of those runs (\S\ref{sec:followup}):
+relative RMS against the
 reference, the measure of \emph{trajectory} error; pattern correlation, the
 Pearson correlation of the mean-removed predicted and reference fields, which
 measures \emph{phase}; amplitude ratio, the ratio of their standard deviations;
 and energy drift $|E(t)-E(0)|/E(0)$, computed with the solver's own energy
 functional on the model's own trajectory.
+
+\subsection{Follow-up experiments}
+\label{sec:followup}
+
+A second round of experiments, run after the first and on a newer software
+stack, addresses the limitations stated in \S\ref{sec:nodes} and \S\ref{sec:limits}.
+
+\paragraph{Two further grids.} \texttt{wave1d\_cgl} is the Dirichlet wave
+equation on $[-1,1]$ sampled at $65$ CGL nodes, where Clenshaw--Curtis is the
+correct quadrature and $\Wc$ is the matched form. With the first-derivative
+matrix $D$ and the Clenshaw--Curtis weights $W$, the semi-discrete operator
+$A=-W^{-1}D^{\top}WD$ satisfies $WA=A^{\top}W$, so $u_t=v$, $v_t=c^2Au$ is
+canonically Hamiltonian in $\omega_W$ with
+$H=\tfrac12\big(v^{\top}Wv+c^2(Du)^{\top}W(Du)\big)$, and St\"ormer--Verlet keeps
+the reference trajectories symplectic in that form ($7\times10^{-17}$ in the
+relative defect; $H$ changes by $3\times10^{-5}$ over $500$ stored steps). The
+stored step is $0.01$, giving $c\,\Delta t/L=0.005$ as for \texttt{wave1d\_dir}.
+\texttt{wave1d\_kte} is the same equation on the Kosloff--Tal-Ezer grid
+$x_j=\arcsin(\alpha\xi_j)/\arcsin\alpha$, $\alpha=0.995$, with $\xi_j$ the CGL
+nodes. Its quadrature is the Clenshaw--Curtis weight times $dx/d\xi$, which is
+neither constant nor Clenshaw--Curtis, so both standard forms are mismatched
+there and only a third form $W_{\mathrm{kte}}$ is matched. As before, the
+operator reads sample $j$ as the CGL node.
+
+\paragraph{Seeds, cohorts and uncertainty.} The lifted and lift-free pairs of
+the nine uniform problems received two more seeds (3 and 4), giving five;
+\texttt{wave1d\_cgl} and \texttt{wave1d\_kte} used five throughout. The follow-up
+ran on PyTorch 2.13 (the first round on 2.8) and scored $32$ test trajectories
+per matrix run rather than $12$, from the same split seeds. Seeds $0$--$2$ and
+$3$--$4$ therefore differ in software and in test-set size, and we pool them only
+through the per-seed error. For each pair we take, per seed, the ratio of the
+mismatched to the matched model's relative RMS at step $200$ ($150$ in $3$-D),
+with errors above $10^{3}$ clipped as in \S\ref{sec:splits}, and report the
+number of seeds won and the median ratio with its range. A comparison is called
+only if a $95\%$ bootstrap interval for the mean log-ratio over seeds excludes
+zero \emph{and} the median ratio differs from one by at least $5\%$; otherwise it
+is reported as inconclusive. The $5\%$ floor was added after a $1\%$ difference
+was flagged by an interval whose lower end was barely above one while three of
+five seeds agreed. It can only turn a call into an inconclusive one, and it
+changes none of the uniform-grid or CGL calls.
+
+\paragraph{Long-horizon protocol and controls.} Both rounds train each
+long-horizon model on $384$ trajectories of $400$ steps for $12$ epochs with a
+recursive curriculum, then roll it out for $2\times10^{4}$ steps from the first
+$8$ test initial conditions, scoring at log-spaced checkpoints; every number is
+the mean over those $8$ trajectories. The follow-up repeats the lift-free and
+lifted $\Wu$ families on the four wave problems and SNO and FNO on the two $1$-D
+problems, all with the same seeds; runs the lifted and lift-free families on the
+two new grids; and adds controls. \emph{Canonical wrapper}: the core
+inside a learned pointwise change of coordinates
+($q\mathrel{+}=Ap$, $p\mathrel{+}=Bq$, $q\mathrel{+}=Cp$ with symmetric $A,B,C$,
+and its inverse), which acts on channels only and is therefore symplectic in
+every diagonal $W$; it adds three parameters. \emph{No residual}: the lifted
+variant without the residual update. \emph{Persistence}: $x\mapsto x$.
+\emph{Untrained}: the lift-free core with its gains fixed at $0.3$.
+\emph{One epoch}: the same core trained for a single epoch.
+\emph{Perturbed adjoint}: the adjoint's channel-mixing matrix is replaced by
+$M+\epsilon\lVert M\rVert\,\Delta/\lVert\Delta\rVert$ for a fixed random $\Delta$,
+which is symplectic in no form. At the first test state we also measure the
+end-to-end defect (float64 in $1$-D, float32 otherwise), the eigenvalues of the
+one-step Jacobian ($1$-D and $2$-D) and a Lyapunov estimate.
+
+\paragraph{Unseen resolutions.} On \texttt{wave1d\_dir} and \texttt{wave1d\_cgl}
+we train on two resolutions ($32$ and $64$ points, or $33$ and $65$ nodes) with
+$256$ trajectories each, and test the one-step error on six, four of them unseen
+($24$, $48$, $96$, $128$, or $25$, $49$, $97$, $129$), with $3$ seeds.
 
 % ============================================================================
 \section{Results: the three research questions}
@@ -1169,69 +1258,162 @@ $96$ & independent & $4.9\%$  & $8.4\%$  & $9.0\%$  & $15.8\%$ & $7.9\%$  & $15.
 \subsection{RQ2: Does matching the form to the grid improve prediction?}
 \label{sec:ablation}
 
-Every benchmark here is sampled on a \emph{uniform} grid, so $\Wu$ is the
-matched form and $\Wc$ the mismatched one in every experiment
-(\S\ref{sec:nodes}). Figure~\ref{fig:ablation} compares models that are
-identical in architecture, parameter count and training recipe and differ only
-in the $W$ inside the adjoint.
+Every pair compared here is identical in architecture, parameter count and
+training recipe, and differs only in the weight $W$, which enters both the
+kernel's quadrature and its adjoint (\S\ref{sec:sacheb-arch}). The matched form
+is the one whose weights are the quadrature of the data's own grid: $\Wu$ on the
+nine uniform grids, $\Wc$ on CGL nodes, and $W_{\mathrm{kte}}$ on the mapped
+grid, where neither standard form is. Figure~\ref{fig:ablation} shows the
+per-seed evidence for all three; the protocol is in \S\ref{sec:followup}.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figs/form_ablation.png}
-\caption{Matched versus mismatched form at identical capacity: mean relative
-RMS over 3 seeds at step $200$ ($150$ in $3$-D). \textbf{(a)} Lifted pair,
-non-recursive (\texttt{seq2seq}) configuration: the matched form wins all nine
-problems, by $1.1$--$8.0\times$; the recursive configuration is discussed in the
-text. \textbf{(b)} Lift-free pair, where the deployed map is exactly symplectic
-end to end: the matched form wins all four problems, by $14$--$22\times$ on three
-and $1.24\times$ on \texttt{wave1d\_dir}. On those three the mismatched
-lift-free model has failed outright, with error comparable to the signal, so
-the ratio contrasts a working model with a failed one rather than grading two
-working models.}
+\includegraphics[width=\linewidth]{figs/fig_review_grids.png}
+\caption{Matched versus mismatched form at identical capacity: error ratio
+mismatched/matched at step $200$ ($150$ in $3$-D), five seeds, errors clipped at
+$10^{3}$. A ratio above one means the matched form is better. \textbf{(a)}
+Uniform grids, matched $\Wu$: one dot per problem (median over seeds); open dots
+mark problems on which not every seed agrees. \textbf{(b)} CGL nodes, matched
+$\Wc$: one dot per seed. \textbf{(c)} Mapped grid, matched $W_{\mathrm{kte}}$:
+one dot per seed, against each of the other two forms. Black bars are medians;
+arrows mark seeds off the plotted range.}
 \label{fig:ablation}
 \end{figure}
 
-Across both prediction modes the lifted pair gives $18$ comparisons. The matched
-form has the lower mean error in $16$ of them, and in $15$ it is better in every
-seed. In the remaining three, all recursive, the seeds disagree: on heat and
-\texttt{ns2d} the mismatched form leads on the mean by $1.02\times$ and
-$1.04\times$ while losing two of three seeds, and on \texttt{wave1d\_dir} both
-models fail in two of three seeds (relative RMS above $20$ in one, divergence in
-the other), so the comparison is empty. No pair favours the
-mismatched form in every seed. For the lift-free pair the matched form wins all
-four problems in every seed (Table~\ref{tab:pure}).
+\paragraph{Uniform grids.} Table~\ref{tab:forms-uniform} summarises the
+$22$ comparisons that the lifted and lift-free configurations give on the nine
+problems (the lift-free pair exists only on the four two-field problems). The
+matched form is called better in $17$, inconclusive in $5$, and worse in none.
+Sixteen comparisons favour it in every one of the five seeds and five in four of
+five. The five inconclusive ones are both lifted pairs on heat, and the recursive
+lifted pair on \texttt{wave3d}, \texttt{ns2d} and \texttt{wave1d\_dir}; in the
+first four the matched form still leads on the median ($1.08$--$1.56\times$), and
+in \texttt{wave1d\_dir} nearly every run of both models diverges, so the ratio is
+$1.00$. The two seeds added in the follow-up, on newer software and a larger test
+set, agree with the first three: the matched form wins $40$ of $44$ seed pairs.
 
 \begin{table}[htbp]
 \centering
-\caption{Lift-free pair: both models exactly symplectic \emph{end to end},
-differing only in which form. Relative RMS, 3 seeds.}
-\label{tab:pure}
+\caption{Uniform grids, matched $\Wu$ against mismatched $\Wc$, five seeds.
+\emph{Matched}, \emph{inconclusive} and \emph{other} count problems by the
+verdict rule of \S\ref{sec:followup}; \emph{seeds won} counts seed pairs in which
+the matched form has the lower error; the last column is the median over
+problems of the per-problem median ratio, with the range of those medians.}
+\label{tab:forms-uniform}
 \small
-\begin{tabular}{@{}lccc@{}}
+\begin{tabular}{@{}lccccrr@{}}
 \toprule
-problem & \texttt{purecheb} ($\Wc$) & \texttt{pureunif} ($\Wu$) & ratio \\
+comparison & problems & matched & inconclusive & other & seeds won & median ratio [range] \\
 \midrule
-\texttt{wave1d}      & 1.5182 & \textbf{0.08809} & $17.2\times$ \\
-\texttt{wave1d\_dir} & 0.1020 & \textbf{0.08242} & $1.24\times$ \\
-\texttt{wave2d}      & 0.9332 & \textbf{0.04316} & $21.6\times$ \\
-\texttt{wave3d}      & 1.0273 & \textbf{0.07238} & $14.2\times$ \\
+lifted, recursive & 9 & 5 & 4 & 0 & 39/45 & 1.44 [1.00, 2.09] \\
+lifted, seq2seq & 9 & 8 & 1 & 0 & 44/45 & 1.77 [1.07, 6.30] \\
+lift-free & 4 & 4 & 0 & 0 & 19/20 & 15.87 [1.07, 21.26] \\
+\midrule
+all uniform & 22 & 17 & 5 & 0 & 102/110 & \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-What this establishes is bounded by the grids. Because $\Wu$ is the matched form
-in every experiment, a preference for $\Wu$ is predicted equally by ``the form
-must match the discretisation'' and by ``constant weights are simply better''.
-The experiment that separates them, data sampled on CGL nodes where $\Wc$ becomes
-the matched form and the preference should reverse, is the most important control
-this study still lacks (\S\ref{sec:limits}). The answer to RQ2 is therefore:
-yes in one direction, untested in the other.
+For the lift-free pair (Table~\ref{tab:pure}) the matched form is better by
+$17$, $21$ and $14\times$ on \texttt{wave1d}, \texttt{wave2d} and
+\texttt{wave3d} in every seed, and by $1.07\times$ on \texttt{wave1d\_dir}
+(four seeds of five). On the first three the mismatched model has failed
+outright, with an error near the signal ($0.9$--$1.5$) against $0.04$--$0.09$,
+so those ratios contrast a working model with a failed one rather than grading
+two working models.
+
+\begin{table}[htbp]
+\centering
+\caption{Lift-free pair, both models exactly symplectic \emph{end to end},
+differing only in the form. Relative RMS at step $200$ ($150$ in $3$-D), median
+over five seeds.}
+\label{tab:pure}
+\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+problem & seeds & \texttt{purecheb} ($\Wc$) & \texttt{pureunif} ($\Wu$) & ratio & [range] & seeds won \\
+\midrule
+\texttt{wave1d} & 5 & 1.5219 & 0.0880 & 17.34 & [14.97, 20.06] & 5/5 \\
+\texttt{wave1d\_dir} & 5 & 0.1050 & 0.0877 & 1.07 & [0.98, 1.44] & 4/5 \\
+\texttt{wave2d} & 5 & 0.9047 & 0.0414 & 21.26 & [16.09, 22.78] & 5/5 \\
+\texttt{wave3d} & 5 & 1.0568 & 0.0734 & 14.40 & [10.60, 16.91] & 5/5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The reverse direction.} On CGL nodes the roles of the two standard
+forms swap, and the matching hypothesis predicts that the preference reverses.
+For two of the three pairs it does (Table~\ref{tab:forms-grids}). With the lifted
+recursive configuration $\Wc$ wins in all five seeds, by a median of $2.45\times$
+(the largest ratio, $53\times$, comes from a seed in which the $\Wu$ model
+diverged), and with the lift-free pair it wins in all five, by a median of
+$1.42\times$; the trajectory-level geometric mean is $1.35\times$ with a $95\%$
+bootstrap interval of $[1.16,1.56]$. For the non-recursive (\texttt{seq2seq})
+pair there is no preference: $0.99\times$, with $\Wc$ ahead in one seed of five.
+The reversal is smaller than the forward effect: $1.4\times$ for the lift-free
+pair against $14$--$21\times$ on the uniform grids. One possible reason, which we
+have not tested, is that the mismatched model fails more gently here: the CGL
+fields vanish at the clustered end nodes where $\Wu$ and $\Wc$ differ most,
+whereas on the periodic uniform grids the signal has support everywhere.
+
+\begin{table}[htbp]
+\centering
+\caption{Reverse direction and mapped grid, five seeds. \emph{vs} names the
+mismatched form the matched one is compared with; \emph{seeds won} counts seeds
+in which the matched form has the lower error; ratios are mismatched/matched
+(median and range over seeds); \emph{verdict} follows the rule of
+\S\ref{sec:followup}, where ``other form'' means the mismatched form is better.}
+\label{tab:forms-grids}
+\small
+\begin{tabular}{@{}llcccl@{}}
+\toprule
+grid (matched) & comparison & vs & seeds won & ratio [range] & verdict \\
+\midrule
+CGL ($\Wc$) & lifted, recursive & $\Wu$ & 5/5 & 2.45 [1.15, 52.82] & matched form \\
+ & lifted, seq2seq & $\Wu$ & 1/5 & 0.99 [0.85, 1.05] & inconclusive \\
+ & lift-free & $\Wu$ & 5/5 & 1.42 [1.06, 1.75] & matched form \\
+\midrule
+mapped ($W_{\mathrm{kte}}$) & lifted, recursive & $\Wc$ & 0/5 & $2.1\times10^{-3}$ [$2.6\times10^{-4}$, 0.38] & other form \\
+ & lifted, recursive & $\Wu$ & 2/5 & 1.00 [0.01, 80.51] & inconclusive \\
+ & lifted, seq2seq & $\Wc$ & 1/5 & 0.96 [0.95, 1.07] & inconclusive \\
+ & lifted, seq2seq & $\Wu$ & 4/5 & 1.01 [1.00, 1.02] & inconclusive \\
+ & lift-free & $\Wc$ & 3/5 & 1.01 [0.94, 1.16] & inconclusive \\
+ & lift-free & $\Wu$ & 3/5 & 1.01 [0.89, 1.25] & inconclusive \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{A grid where neither standard form is right.} On the mapped grid the
+exactly matched $W_{\mathrm{kte}}$ brings no consistent benefit. The
+\texttt{seq2seq} and lift-free pairs are within $4\%$ of each other for all
+three weights and inconclusive. For the lifted recursive pair $W_{\mathrm{kte}}$
+is worse than $\Wc$ in all five seeds and indistinguishable from $\Wu$, but
+that comparison is dominated by failures: at step $200$ the error exceeds $3$ in
+four of five seeds for $W_{\mathrm{kte}}$, in all five for $\Wu$, and in one for
+$\Wc$. The mapped grid therefore does not support ``the matched form is best'' in
+any of the pairs.
+
+\paragraph{What this establishes.} The preference follows the grid where the
+grid has a standard quadrature: toward $\Wu$ on uniform grids ($17$ of $22$
+comparisons, none against) and toward $\Wc$ on CGL nodes (two of three, none
+against). That is the reversal the matching hypothesis needed to survive, and it
+did. It is not universal, since the non-recursive CGL pair is a tie and the mapped
+grid shows nothing, and it is limited by a confound that the follow-up exposed.
+The weight also defines the quadrature of the kernel integral, so what was
+varied is the weighting of the \emph{whole operator}, not the symplectic form
+alone. The data therefore support ``use the grid's quadrature weights'' at least
+as directly as ``preserve the grid's symplectic form'', and the control that would
+separate them (kernel quadrature fixed, adjoint weight varied) is the main
+experiment this study still lacks (\S\ref{sec:limits}). The answer to RQ2 is
+therefore: yes where the grid has a standard quadrature, in both directions,
+with effects from $1$ to $20\times$; no on the mapped grid; and not yet
+attributable to the symplectic form specifically.
 
 \subsection{RQ3: End-to-end symplecticity and the conventional wrapper}
 \label{sec:long}
 
 Each long-horizon run trains a model once and rolls it out autoregressively for
-$2\times10^{4}$ steps from the $12$ test initial conditions, on the four wave
+$2\times10^{4}$ steps from the first $8$ test initial conditions, on the four wave
 problems with three seeds each. With $c=1$ and $\Delta t=0.02$ on $[-1,1)^d$
 that is $400$ time units, or $200$ transits of the domain; for
 \texttt{wave1d\_dir} ($\Delta t=0.005$, $L=1$) it is $100$ transits. Nothing at
@@ -1288,7 +1470,7 @@ FNO & no & $0$ & $0$ & $0$ & $0$ & $0/12$ \\
 \end{table}
 
 \paragraph{Boundedness.} The matched-form lift-free operator is the only
-family bounded in every run (Table~\ref{tab:census}). The same construction in
+family of the main study bounded in every run (Table~\ref{tab:census}). The same construction in
 the mismatched form is bounded on the three lower-dimensional problems and
 diverges on \texttt{wave3d} in every seed, although it is exactly symplectic end
 to end: as P3 anticipated, exact symplecticity is not sufficient for
@@ -1306,8 +1488,9 @@ lifted or Fourier operator does stay bounded it is \emph{more} accurate: the
 lifted $\Wu$ variant reaches relative RMS $0.44$ on \texttt{wave2d} and $0.35$ on
 \texttt{wave3d}, with median pattern correlation above $0.9$, and SNO reaches
 $0.36$ on \texttt{wave1d} with correlation $0.94$. What end-to-end symplecticity
-bought in these experiments is reliability, in that it never diverged, rather
-than accuracy.
+bought in these experiments is reliability, in that the matched-form model never
+diverged, rather than accuracy; the controls below show how little that
+reliability alone establishes.
 
 \begin{table}[htbp]
 \centering
@@ -1350,18 +1533,198 @@ problem & family & bounded & rel.\ RMS & pattern corr. & amp.\ ratio & $|\Delta 
 \end{tabular}
 \end{table}
 
+\paragraph{Which part of the wrapper loses boundedness?} The follow-up adds
+variants between the bare core and the conventional wrapper
+(Table~\ref{tab:staged}, Figure~\ref{fig:staged}). The core alone is bounded in
+all $18$ runs, including the two new grids. Inside a learned canonical wrapper it
+stays bounded ($12$ of $12$). That the wrapped map is symplectic is guaranteed,
+since a composition of symplectic maps is symplectic; that it stays bounded is an
+experimental result, not a consequence. Behind a pointwise linear lift and
+projection, with no residual update, it is
+bounded in $3$ of $12$ runs; with the residual update added, the conventional
+wrapper, in $4$ of $18$ ($0$ of $6$ on the two new grids). The exception is
+\texttt{wave2d}, where the full wrapper stays bounded in all three seeds and is
+the most accurate variant (median error $0.58$ against $0.66$ for the core). So
+the loss of boundedness comes with the non-symplectic lift and projection, and
+the residual update adds little in $1$-D and $3$-D. This is not a controlled
+separation of symplecticity from capacity: the canonical wrapper adds three
+parameters, while the lifted variants have a different width and rank at the same
+$25$k budget, so ``symplectic wrapper versus not'' is crossed with the size of
+the wrapper.
+
+\begin{table}[htbp]
+\centering
+\caption{Long-horizon census of the follow-up: runs bounded (relative RMS $\le3$
+at step $2\times10^{4}$) out of three seeds per problem. The first block repeats
+the main study's matched-form lift-free operator and its lifted counterpart on
+the same seeds; later blocks are controls. \emph{Symplectic} says what the
+construction guarantees. A dash marks a variant not run on that problem; SNO and
+FNO were run on the two $1$-D problems.}
+\label{tab:staged}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llcccccc@{\hspace{6pt}}c@{}}
+\toprule
+variant & symplectic & \texttt{wave1d} & \texttt{wave1d\_dir} & \texttt{wave2d} & \texttt{wave3d} & \texttt{cgl} & \texttt{kte} & total \\
+\midrule
+core only (lift-free), $\Wu$ & end to end & 3 & 3 & 3 & 3 & 3 & 3 & $18/18$ \\
+core + canonical wrapper & end to end & 3 & 3 & 3 & 3 & -- & -- & $12/12$ \\
+core + linear lift/projection & core only & 1 & 0 & 1 & 1 & -- & -- & $3/12$ \\
+core + lift/projection + residual & core only & 0 & 0 & 3 & 1 & 0 & 0 & $4/18$ \\
+\midrule
+persistence ($x\mapsto x$) & trivially & 3 & 3 & 3 & 3 & 3 & 3 & $18/18$ \\
+\midrule
+core, trained one epoch & end to end & 3 & 3 & -- & -- & -- & -- & $6/6$ \\
+core, untrained & end to end & 0 & 0 & -- & -- & -- & -- & $0/6$ \\
+\midrule
+core, adjoint perturbed $1\%$ & approximately & 3 & 3 & -- & -- & -- & -- & $6/6$ \\
+core, adjoint perturbed $10\%$ & approximately & 3 & 3 & -- & -- & -- & -- & $6/6$ \\
+core, adjoint perturbed $100\%$ & no & 0 & 0 & -- & -- & -- & -- & $0/6$ \\
+\midrule
+SNO & core only & 2 & 2 & -- & -- & -- & -- & $4/6$ \\
+FNO & no & 0 & 0 & -- & -- & -- & -- & $0/6$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_review_staged.png}
+\caption{Relative RMS of the staged wrapper ablation on the four wave problems;
+line: median of three seeds, band: range over seeds. Green solid: the core
+alone; green dashed: the core in a canonical wrapper; orange: behind a linear
+lift and projection without residual update; red: the conventional wrapper;
+grey dotted: the identity map. The dotted horizontal line marks error $=$
+signal.}
+\label{fig:staged}
+\end{figure}
+
+\paragraph{Everything that is exactly symplectic end to end.} Across both
+rounds, $63$ rollouts used a map that is exactly symplectic end to end in some
+form: the main study's lift-free operators in both forms ($24$), the follow-up's
+core in the three forms ($27$, of which $12$ re-run the main study's matched-form
+operator on the same seeds) and the canonical wrapper ($12$). Sixty were bounded.
+The three that were not are the mismatched-form model on \texttt{wave3d}, in
+every seed; the other mismatched-form runs, on \texttt{wave1d},
+\texttt{wave1d\_dir}, \texttt{wave2d}, the CGL grid and the mapped grid, were
+bounded.
+
+\paragraph{What boundedness does and does not show.} Three controls bound the
+reading. First, the identity map $x\mapsto x$ is exactly symplectic, has zero
+energy drift, and is bounded in all $18$ runs, so boundedness alone is no
+evidence of dynamics. Its error is of order one: the median over checkpoints
+from step $10^{3}$ on is $0.95$--$1.69$ against $0.32$--$0.40$ for the core,
+which is the only evidence here that a bounded end-to-end symplectic map retains
+some of the dynamics at that horizon, a factor of three to four. The final-step
+error is misleading in $1$-D: the reference is periodic with a period that
+divides $2\times10^{4}$ steps ($200$ periods for \texttt{wave1d}, $50$ for
+\texttt{wave1d\_dir}), so the identity map ends near the initial state and scores
+$0.15$ and $0.19$ at the last step, below the core's $1.06$ and $0.60$. We
+therefore report the late-window median (Table~\ref{tab:controls}); the
+$2$-D and $3$-D problems have no such recurrence. Second, an exactly symplectic
+core with untrained, fixed gains diverges in all $6$ runs (spectral radius
+$10^{3}$--$10^{9}$), so symplecticity is not sufficient. Third, the same core
+trained for a single epoch is bounded in all $6$.
+
+\begin{table}[htbp]
+\centering
+\caption{Accuracy of the controls: medians over three seeds at step
+$2\times10^{4}$ (relative RMS, pattern correlation, $|\Delta E/E|$) and of the
+relative RMS over all checkpoints from step $10^{3}$ (\emph{late}). The $1$-D
+identity map's final-step error reflects an exact recurrence of the reference
+(see text); its late-window error is the fair comparison.}
+\label{tab:controls}
+\small
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+problem & variant & bounded & rel.\ RMS, late & rel.\ RMS, final & pattern corr. & $|\Delta E/E|$ \\
+\midrule
+\texttt{wave1d} & core only & 3/3 & 0.39 & 1.06 & 0.46 & 2.08 \\
+ & core + canonical & 3/3 & 0.34 & 0.89 & 0.57 & 2.08 \\
+ & full wrapper & 0/3 & 3.07 & $4.6\times10^{5}$ & 0.03 & $3.0\times10^{12}$ \\
+ & persistence & 3/3 & 1.69 & 0.15 & 0.98 & 0 \\
+\midrule
+\texttt{wave1d\_dir} & core only & 3/3 & 0.32 & 0.60 & 0.65 & 6.51 \\
+ & core + canonical & 3/3 & 0.34 & 0.92 & 0.72 & 17.38 \\
+ & full wrapper & 0/3 & $6.1\times10^{5}$ & $6.2\times10^{5}$ & 0.02 & $6.5\times10^{13}$ \\
+ & persistence & 3/3 & 0.95 & 0.19 & 0.96 & 0 \\
+\midrule
+\texttt{wave2d} & core only & 3/3 & 0.34 & 0.66 & 0.80 & 2.14 \\
+ & core + canonical & 3/3 & 0.33 & 0.63 & 0.82 & 2.17 \\
+ & full wrapper & 3/3 & 0.12 & 0.58 & 0.86 & 2.66 \\
+ & persistence & 3/3 & 1.45 & 1.26 & 0.16 & 0 \\
+\midrule
+\texttt{wave3d} & core only & 3/3 & 0.35 & 1.11 & 0.50 & 1.03 \\
+ & core + canonical & 3/3 & 0.39 & 1.22 & 0.45 & 1.71 \\
+ & full wrapper & 1/3 & 132 & $6.8\times10^{5}$ & 0.01 & $1.2\times10^{12}$ \\
+ & persistence & 3/3 & 1.48 & 1.01 & 0.43 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Approximate symplecticity, and what boundedness tracks.} Exact
+symplecticity is not necessary at this horizon either. Perturbing the adjoint's
+channel mixing by $1\%$ or $10\%$, which gives a measured end-to-end defect of
+$2\times10^{-4}$ to $4\times10^{-3}$, leaves all $12$ runs bounded, with the
+error at most $1.4\times$ that of the unperturbed core and the energy drift up to
+$8\times$ higher, while a $100\%$ perturbation (defect $2$--$3\times10^{-2}$)
+is unbounded in all $6$ (Figure~\ref{fig:stability}b). What boundedness did track
+is the spectral radius $\rho$ of the one-step Jacobian at the first test state
+(Figure~\ref{fig:stability}a). Among $102$ trained maps on the $1$-D and $2$-D
+problems, every one with $\rho\le1+3\times10^{-4}$ was bounded ($59$ of $59$) and
+one of $43$ above it was, an SNO run. That is where linear growth would put the
+boundary, since $(1+3\times10^{-4})^{2\times10^{4}}\approx e^{6}$. The core and
+the canonical wrapper have $\rho$ within $2\times10^{-6}$ of one, with all
+eigenvalues on the unit circle; the $1\%$ and $10\%$ perturbed maps sit at
+$1.000005$ and $1.00017$ (bounded) and the $100\%$ ones at $1.001$--$1.003$
+(unbounded); SNO has a median of $1.0006$, the linear-lift variant $1.0013$,
+FNO $1.008$ and the full wrapper $1.014$. A symplectic map need not have
+$\rho=1$, as the untrained control shows, but the trained ones did. The
+end-to-end defect, which the instrument of \S\ref{sec:defect} measures, separates
+the groups less sharply: every map with defect $\le10^{-6}$ was bounded
+($36$ of $36$), but $22$ of $65$ above $10^{-3}$ still were, and across the $114$
+trained maps its rank correlation with the final error is $0.63$. Over training
+epochs its rank correlation with the growth of the state norm, $0.58$, is no
+higher than that of the one-step validation error, $0.62$. The defect says
+whether a map is symplectic, not whether it will be stable. Two caveats apply:
+$\rho$ is evaluated at one state, so it is a local diagnostic rather than a proof,
+and the correlations pool different families and problems.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_review_stability.png}
+\caption{Stability diagnostics of the follow-up. \textbf{(a)} Each trained map on
+the $1$-D and $2$-D problems: spectral radius of the one-step Jacobian minus one
+(floored at $10^{-9}$) against the relative RMS at step $2\times10^{4}$. The
+dashed line marks $\rho=1+3\times10^{-4}$, the dotted line the boundedness
+threshold. \textbf{(b)} Perturbing the adjoint by a relative amount $\epsilon$
+(labels): end-to-end defect against error, median of three seeds.}
+\label{fig:stability}
+\end{figure}
+
+\paragraph{A repeat on newer software.} The follow-up re-ran the main study's
+long-horizon runs for the lift-free $\Wu$ and lifted $\Wu$ families on the four
+wave problems and for SNO and FNO on the two $1$-D problems, with the same seeds
+($36$ paired runs). The classification into bounded and unbounded agrees in $33$
+of them: the matched-form lift-free operator is bounded in all $12$ again, the
+lifted $\Wu$ variant in $4$ of $12$ again (with the individual seeds on
+\texttt{wave2d} and \texttt{wave3d} changing), and SNO in $4$ of $6$ against $3$ of $6$.
+
 \paragraph{What this means physically.} After $100$--$200$ domain transits the
 bounded lift-free model still carries a wave of about the right size, travelling
 with the wrong phase, and it has not conserved energy: $|\Delta E/E|$ on its own
-trajectory is $1.26$--$6.25$, an energy error of $126$--$625\%$, against at most
-$0.033\%$ for the reference leap-frog integrator over the same horizon. Since
+trajectory is $1.26$--$6.25$ in the main study and $1.03$--$6.51$ in the
+follow-up, an energy error of $103$--$651\%$, against at most $0.034\%$ for the
+reference leap-frog integrator over the same horizon. Since
 the amplitude is roughly right, the excess must sit mostly in the gradient term
 $c^{2}\lVert\nabla u\rVert^{2}$, consistent with the roughening visible in
 Figures~\ref{fig:fields-dir} and~\ref{fig:fields-long}. The best energy
-behaviour of any bounded run in the study, a lifted $\Wu$ run on \texttt{wave3d}
-at $7\%$, is still more than two orders of magnitude worse than the reference.
-No learned operator here conserves energy in a physically useful sense at this
-horizon, and we do not claim one does.
+behaviour of any bounded trained run in either round, a lifted $\Wu$ run on
+\texttt{wave3d}, is $4.3\%$ (follow-up) and $6.8\%$ (main study), still two orders
+of magnitude worse than the reference. The identity map has exactly zero drift,
+for the trivial reason that it does not move. No learned operator here conserves
+energy in a physically useful sense at this horizon, and we do not claim one
+does.
 
 \paragraph{What it does not mean.} Backward-error analysis explains why
 symplectic \emph{integrators} conserve a modified Hamiltonian over exponentially
@@ -1590,8 +1953,16 @@ isolated the source, which we presume to be floating-point nondeterminism
 amplified by training. Execution B's per-problem winners were re-selected from
 its own runs, by the same metric as execution A's (\S\ref{sec:splits}).
 
+The follow-up of \S\ref{sec:followup} is a third, partial check on newer software
+(PyTorch 2.13 against 2.8). It adds seeds $3$ and $4$ for the headline pairs of
+the matrix, so the lift-free pair, previously one execution of three seeds, now
+has five; and it repeats the long-horizon runs of the lift-free and lifted $\Wu$
+families (and SNO and FNO in $1$-D) on all three seeds. The new matrix seeds
+extend rather than repeat the first three, but they were run independently of
+them.
+
 We call this a repeat execution rather than a replication, and the distinction is
-worth keeping. Both executions share an implementation, an experimental design, a
+worth keeping. The executions share an implementation, an experimental design, a
 cluster and a set of authors. The comparison bounds how much of the study is an
 artefact of one particular execution. It says nothing about whether an
 independent group writing an independent implementation would reach the same
@@ -1600,24 +1971,25 @@ authors can certify for themselves.
 
 \begin{table}[htbp]
 \centering
-\caption{Headline claims under the repeat execution. \emph{One execution} marks
-claims whose runs were not re-executed and so cannot be checked this way.}
+\caption{Headline claims under repetition. The first-round column gives the
+original result; the follow-up column the repeat or extension on newer software.
+\emph{Not repeated} marks claims that rest on one execution.}
 \label{tab:repro}
 \small
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}lccl@{}}
+\begin{tabular}{@{}p{43mm}p{33mm}p{52mm}p{25mm}@{}}
 \toprule
-claim & execution A & execution B & status \\
+claim & first round & follow-up & status \\
 \midrule
-form ablation, lifted, $1$-D ($12$ pairs) & $\Wu$ $11$, tie $1$ & $\Wu$ $11$, $\Wc$ $1$ & robust \\
-form ablation, lifted, $2$-D/$3$-D ($6$ pairs) & \multicolumn{2}{c}{$\Wu$ $5$, $\Wc$ $1$ (one execution)} & not repeated \\
-lift-free pair ($4$ problems) & \multicolumn{2}{c}{$17.2/1.24/21.6/14.2\times$ (one execution)} & not repeated \\
-long-horizon census, seed $0$ & \multicolumn{2}{c}{identical classification for every family} & robust \\
-long-horizon census, seeds $1$--$2$ & \multicolumn{2}{c}{one execution} & not repeated \\
-winner, $1$-D, $5$ of $6$ problems & \multicolumn{2}{c}{unchanged} & stable \\
-winner, advection & \ckino{} $0.001092$ & SNO $0.001196$ & flipped \\
-winner, $2$-D/$3$-D ($3$ problems) & \multicolumn{2}{c}{unchanged; winning runs from one execution} & partly repeated \\
-tie tally, ours / SNO / T-FNO & $5.0$ / $2.0$ / $2.0$ & $5.0$ / $2.5$ / $1.5$ & ours stable \\
+form ablation, lifted & $16$ of $18$ pairs & $17$ matched, $5$ inconclusive, $0$ other (of $22$) & reproduced \\
+lift-free pair, ratios & $17.2/1.24/21.6/14.2\times$ & $17.3/1.07/21.3/14.4\times$ (five seeds) & extended, agrees \\
+long-horizon, lift-free $\Wu$ & $12$ of $12$ bounded & $12$ of $12$ & reproduced \\
+long-horizon, lifted $\Wu$ & $4$ of $12$ & $4$ of $12$; $2$ runs changed class & reproduced in count \\
+long-horizon, SNO ($1$-D) & $3$ of $6$ & $4$ of $6$ & one run changed \\
+long-horizon, mismatched lift-free & $9$ of $12$ & not repeated & not repeated \\
+winner, $1$-D, $5$ of $6$ problems & \multicolumn{2}{l}{unchanged between executions A and B} & stable \\
+winner, advection & \ckino{} $0.001092$ & SNO $0.001196$ (execution B) & flipped \\
+tie tally, ours / SNO / T-FNO & $5.0$/$2.0$/$2.0$ (A) & $5.0$/$2.5$/$1.5$ (B) & ours stable \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1638,14 +2010,15 @@ change.
 
 \paragraph{What follows.} First, a working rule rather than a statistical test:
 with three seeds we treat a margin that falls within the combined seed spread of
-the two contenders as inconclusive, not as a result (\S\ref{sec:accuracy}). The
-re-run shows why, since re-running alone moved the same configuration by
-$13$--$20\%$. Second, a reporting standard: the seed spread should be published
-alongside the mean, because it is what tells a reader whether a margin is
-load-bearing, and we report both throughout. Third, the claims marked
-\emph{not repeated} in Table~\ref{tab:repro} rest on one execution: the lift-free
-pair, the multi-dimensional half of the form ablation and two of the three
-long-horizon seeds.
+the two contenders as inconclusive, not as a result (\S\ref{sec:accuracy}); with
+five seeds the follow-up applies an interval and an effect floor instead
+(\S\ref{sec:followup}). The re-run shows why, since re-running alone moved the
+same configuration by $13$--$20\%$. Second, a reporting standard: the seed spread
+should be published alongside the mean, because it is what tells a reader whether
+a margin is load-bearing, and we report both throughout. Third, the claims marked
+\emph{not repeated} in Table~\ref{tab:repro} rest on one execution, and the
+winners of the $2$-D and $3$-D problems in Table~\ref{tab:winners} still come
+from one.
 
 \subsection{Supporting axes}
 \label{sec:support}
@@ -1669,6 +2042,27 @@ trains unreliably at the training grid: one seed matches the convolutional lift
 construction that is both invariant and reliably accurate, and we do not have a
 fix. If a workflow requires evaluating at a resolution it did not train on, that
 is a decisive argument for the Fourier family and against ours.
+
+\paragraph{Unseen resolutions.} Training on two resolutions and testing the
+one-step error on four unseen ones (\S\ref{sec:followup}) separates the bases
+at the coarse end only (Figure~\ref{fig:multires}). At the coarsest unseen
+resolution ($25$ CGL nodes or $24$ points) the Chebyshev operators' error is
+$5$--$19\times$ (CGL) and $11$--$34\times$ (Dirichlet) that of the best Fourier
+operator, SNO or FNO. At the finer unseen resolutions all models are within
+$1.2$--$1.5\times$ of each other. This is the same verdict as for the
+$64\to128$ test above and extends it: the Chebyshev construction does not
+transfer to coarser grids, and the Fourier operators do.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_review_multires.png}
+\caption{One-step relative error on resolutions seen (circled) and unseen in
+training, geometric mean over three seeds. At the coarsest unseen resolution the
+Chebyshev operators (\texttt{sacheb} variants) are one to two orders of
+magnitude worse than SNO and FNO; at finer resolutions the models are within
+about $1.5\times$.}
+\label{fig:multires}
+\end{figure}
 
 \paragraph{Inference speed.} Operators beat the reference solver only where the
 solver is expensive: FNO is $3.6\times$ faster on Burgers, $8.9\times$ on KdV
@@ -1697,7 +2091,7 @@ construction & wins & loses \\
 \addlinespace
 \texttt{sacheb\_naive} (lifted, $\Wu$)
  & \texttt{wave1d\_dir} and \texttt{ns2d} at 25k, \texttt{wave2d} tied with SNO; the most accurate long-horizon runs on \texttt{wave2d}/\texttt{wave3d} when it stays bounded
- & no end-to-end guarantee; bounded in only $4$ of $12$ long rollouts \\
+ & no end-to-end guarantee; bounded in only $4$ of $12$ long rollouts; $5$--$34\times$ worse than the Fourier operators at the coarsest unseen resolution \\
 \addlinespace
 \ckino{}
  & advection unconstrained by $\approx10^{3}\times$; Darcy by $8.7\times$ ($18.3\times$ at the boundary)
@@ -1724,8 +2118,9 @@ evenly the tally is ours $5.0$, SNO $2.5$, T-FNO $1.5$; in execution A it was
 $5.0$, $2.0$, $2.0$ (\S\ref{sec:repro}).
 
 Our construction wins the two axes it was designed for, with qualifications:
-reliability under long rollout, where the end-to-end symplectic variant never
-diverged but is not accurate at that horizon, and accuracy on the non-periodic
+reliability under long rollout, where the matched-form end-to-end symplectic variant
+never diverged but is not accurate at that horizon (and an identity map is bounded
+too), and accuracy on the non-periodic
 problem and the multi-dimensional ones, clearly on three of four. It loses the
 two it was not designed for. \textbf{SNO wins discretisation invariance
 outright}, being simultaneously invariant and accurate where our operator can be
@@ -1739,24 +2134,31 @@ operator.
 \label{sec:limits}
 % ============================================================================
 
-\textbf{The matching hypothesis is tested in one direction only.} This is the
-most important gap in the study. Every benchmark here is sampled on a uniform
-grid, so $\Wu$ is the matched form in all nine experiments and $\Wc$ is the
-mismatched one in all nine (Table~\ref{tab:nodes}). The ablation therefore
-establishes that the mismatched form loses; it does not on its own separate that
-explanation from the simpler one that constant weights are just the better
-choice. The decisive control is a dataset genuinely discretised on CGL nodes,
-where $\Wc$ becomes the physically correct quadrature and the preference should
-\emph{reverse}. It is implemented but has not yet been run. Until it is, the
-claim that the inner product must match the discretisation should be read as
-strongly suggested by Theorem~\ref{thm:sacheb} and
-Proposition~\ref{prop:necessity}, and consistent with the measurements, rather
-than as established by them.
+\textbf{The form is not separated from the quadrature rule.} In the
+implementation the weight $W$ defines the quadrature of the kernel integral
+inside $K$ as well as the adjoint $K^{*}$ (\S\ref{sec:sacheb-arch}), so the
+matched and mismatched variants differ in the forward operator too. The
+experiments of RQ2 therefore show that using the grid's quadrature weights
+throughout helps where the grid has a standard quadrature; they do not show that
+the \emph{symplectic form} is what matters. The control that would separate the
+two keeps the kernel quadrature fixed and varies only the weight in the adjoint.
+It is straightforward to build and has not been run, and until it is the title
+question is answered for the operator as a whole rather than for the form alone.
 
-\textbf{The repeat execution is partial.} $126$ of the $783$ matrix runs and two
-of the three long-horizon seeds were executed once (\S\ref{sec:repro}). The
-lift-free contrast of RQ2 and most of the RQ3 census therefore rest on a single
-execution, with three seeds.
+\textbf{The matching hypothesis is only partly supported.} Both directions are
+now tested, on three $1$-D grids, with five seeds. The preference follows the grid
+on uniform grids ($17$ of $22$ comparisons) and on CGL nodes (two of three), but
+the non-recursive CGL pair is a tie and the mapped grid, where neither standard
+form is the quadrature, shows no benefit from the exactly matched weight. The two
+new grids are $1$-D and Dirichlet, and the reversal is much smaller ($1.4\times$)
+than the forward effect ($14$--$21\times$); we have not explained why.
+
+\textbf{The cohorts differ, and repetition is partial.} The follow-up used a
+newer software stack (PyTorch 2.13 against 2.8) and $32$ test trajectories per
+matrix run against $12$, from the same split seeds, and we pool seeds $0$--$2$
+with $3$--$4$ only through the per-seed error. $126$ of the $783$ first-round
+matrix runs, and the mismatched lift-free long-horizon runs, still exist in a
+single execution (\S\ref{sec:repro}).
 
 \textbf{Winner selection in Table~\ref{tab:winners}.} The best configuration per
 problem is chosen on the test split rather than on validation, so those
@@ -1764,20 +2166,25 @@ per-problem numbers are optimistic by an unquantified amount
 (\S\ref{sec:splits}). The paired comparisons the argument rests on are not
 affected, since they are pre-specified rather than selected.
 
-\textbf{The wrapper is removed as a unit.} \S\ref{sec:long} contrasts a lifted
-operator with a lift-free one, but that single change removes the lift, the
-projection and the residual update at once, and additionally forces $H=C$. The
-experiments therefore implicate the conventional wrapper as a whole; they do not
-apportion blame among its three parts, and the lifted variants' occasional
-bounded runs show that the wrapper does not forfeit boundedness every time. A
-staged ablation that restores each component separately, and a variant whose
-lift and projection are themselves canonical transformations, would settle
-which part matters.
+\textbf{The wrapper ablation is confounded with capacity.} The staged ablation of
+\S\ref{sec:long} shows that the non-symplectic linear lift and projection, not the
+residual update, is where boundedness is lost, but the canonical wrapper adds
+three parameters while the lifted variants have a different width and rank at the
+same budget. ``Symplectic wrapper versus not'' is therefore crossed with the size
+of the wrapper, which we did not vary independently. A canonical wrapper with a
+comparable number of parameters would remove the confound.
+
+\textbf{The controls are small and the diagnostics local.} The spectral radius
+that tracked boundedness is evaluated at one state, for the $1$-D and $2$-D
+problems only, and the correlations of \S\ref{sec:long} pool families and
+problems. The identity map shows that boundedness alone is weak evidence, and the
+evidence that the bounded symplectic maps keep some dynamics is a factor of three
+to four in late-window error over that map.
 
 \textbf{Fields are shown for one seed.} Field snapshots were stored for seed $0$
 only, so Figures~\ref{fig:fields-dir} and~\ref{fig:fields-long} show one
-trajectory of one seed; the population numbers are in Tables~\ref{tab:census}
-and~\ref{tab:long}.
+trajectory of one seed; the population numbers are in Tables~\ref{tab:census},
+\ref{tab:long} and~\ref{tab:staged}.
 
 \textbf{Parameter count is the only matched resource.} Equal parameters does not
 mean equal FLOPs, memory or wall-clock across families with arithmetic profiles
@@ -1805,7 +2212,7 @@ short of the regimes where backward-error analysis is usually invoked, and the
 capacity sweep of Figure~\ref{fig:capacity} covers recursive configurations
 only.
 
-\textbf{Single hardware.} All $783$ runs used one accelerator type (Tesla T4)
+\textbf{Single hardware.} All runs of both rounds used one accelerator type (Tesla T4)
 with TF32 disabled, so arithmetic is consistent across the matrix; results may
 differ on accelerators with different defaults.
 
@@ -1817,23 +2224,27 @@ We set out to test whether geometric structure helps a learned operator and foun
 that the question, as usually posed, is incomplete. Symplecticity is defined
 relative to an inner product; on a non-uniform grid two reasonable
 implementations preserve two different forms, both exactly, and only measurement
-distinguishes them. Once the form is named the picture is clean in one
-direction: on the uniform grids these benchmarks use, the form matching the
-discretisation has the lower error in $16$ of $18$ comparisons, and in all $4$
-when the deployed map, rather than merely its core, carries the guarantee, by
-$14$--$22\times$ on three of them. The reverse direction, Chebyshev-sampled data,
-is the experiment this study most needs next. The construction that is
-symplectic end to end in the matched form is also the only one in our study that
-stayed bounded in every $2\times10^{4}$-step rollout. It stays bounded rather
-than accurate: by then its error is comparable to the signal and its energy is
-off by more than $100\%$, and lifted models that happen to stay bounded track the
-wave better. In these experiments, then, structure preservation buys
-reliability rather than accuracy; it does so only end to end and in the matched
-form, and it is invisible unless you say with respect to what. We also retract a
-symplecticity theorem of our own that mistook unit Jacobian determinant for
-preservation of $\omega$, and we think the general lesson is that such claims
-should be measured rather than argued: the measurement needs only standard JVP
-and VJP calls and never forms the Jacobian.
+distinguishes them. Once the form is named the picture is clearer but not
+simple. Matching the weights to the grid helps where the grid has a standard
+quadrature, in both directions: on uniform grids in $17$ of $22$ comparisons and
+by $14$--$21\times$ for the end-to-end symplectic pair, and on CGL nodes in two of
+three, by a smaller margin. It brings nothing on a mapped grid where neither
+standard form is right, and because the weights also define the kernel's
+quadrature, it is not yet attributable to the symplectic form rather than to the
+quadrature rule; the control that would settle that is the next experiment.
+Symplecticity that holds end to end went with bounded rollouts of $2\times10^{4}$
+steps in $60$ of $63$ runs, and a non-symplectic linear lift and projection
+lost it in most, but the controls limit what that shows: an identity map is
+bounded, an untrained symplectic map is not, a small perturbation of the adjoint
+leaves the map bounded, and what boundedness tracked was the spectral radius of
+the one-step Jacobian. The bounded maps are not accurate at that horizon, with
+errors comparable to the signal and energy off by more than $100\%$. In these
+experiments, then, structure preservation buys reliability rather than accuracy,
+and the relevant property looks more like near-neutral linear stability than
+exact symplecticity. We also retract a symplecticity theorem of our own that
+mistook unit Jacobian determinant for preservation of $\omega$, and we think the
+general lesson is that such claims should be measured rather than argued: the
+measurement needs only standard JVP and VJP calls and never forms the Jacobian.
 
 % ============================================================================
 \begin{thebibliography}{99}\small

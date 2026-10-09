@@ -4,10 +4,12 @@ arXiv rejects or mangles submissions that carry build artefacts, unused figures
 or absolute paths, so this copies only what the document actually references and
 then compiles the result in isolation.
 
-    python paper/make_arxiv.py
+    python paper/make_arxiv.py                      # writes arxiv/
+    python paper/make_arxiv.py --out arxiv_v2       # writes a separate folder, arxiv/ untouched
 """
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import shutil
@@ -21,6 +23,13 @@ MAIN = "weight_of_the_adjoint"
 OUT = os.path.join(ROOT, "arxiv")
 SRC = os.path.join(OUT, "src")
 
+
+def set_output(path):
+    """Redirect the whole package to ``path`` (relative to the repo root unless absolute)."""
+    global OUT, SRC
+    OUT = path if os.path.isabs(path) else os.path.join(ROOT, path)
+    SRC = os.path.join(OUT, "src")
+
 # arXiv accepts only these characters in file names.
 SAFE = re.compile(r"^[A-Za-z0-9_+\-.,=]+$")
 
@@ -30,7 +39,10 @@ def fail(msg):
     return 1
 
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--out", default="arxiv", help="output folder (default: arxiv)")
+    set_output(ap.parse_args(argv).out)
     tex_path = os.path.join(HERE, f"{MAIN}.tex")
     tex = open(tex_path, encoding="utf-8").read()
 
@@ -146,8 +158,8 @@ def main():
 
     # --- metadata for the web form -------------------------------------------
     print()
-    rc |= subprocess.run([sys.executable,
-                          os.path.join(HERE, "make_arxiv_metadata.py")]).returncode
+    rc |= subprocess.run([sys.executable, os.path.join(HERE, "make_arxiv_metadata.py"),
+                          "--out", OUT]).returncode
 
     print("\nPACKAGE READY" if rc == 0 else "\nPROBLEMS FOUND")
     return rc

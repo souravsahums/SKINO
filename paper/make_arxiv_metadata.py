@@ -1,10 +1,15 @@
 """Produce the plain-text metadata arXiv's web form asks you to paste."""
+import argparse
 import os
 import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-OUT = os.path.join(ROOT, "arxiv")
+ap = argparse.ArgumentParser()
+ap.add_argument("--out", default="arxiv", help="folder holding the package (default: arxiv)")
+_out = ap.parse_args().out
+OUT = _out if os.path.isabs(_out) else os.path.join(ROOT, _out)
+os.makedirs(OUT, exist_ok=True)
 tex = open(os.path.join(HERE, "weight_of_the_adjoint.tex"), encoding="utf-8").read()
 
 body = re.search(r"\\begin\{abstract\}(.*?)\\end\{abstract\}", tex, re.S).group(1)
@@ -79,5 +84,6 @@ with open(os.path.join(OUT, "abstract.txt"), "w", encoding="utf-8") as f:
 
 print(f"abstract: {len(abstract)} chars "
       f"({'OK' if len(abstract) <= 1920 else 'TOO LONG -- arXiv caps at 1920'})")
-print(f"wrote arxiv/metadata.txt and arxiv/abstract.txt\n")
+rel = os.path.relpath(OUT, ROOT)
+print(f"wrote {rel}/metadata.txt and {rel}/abstract.txt\n")
 print(abstract[:400] + " ...")
