@@ -135,7 +135,7 @@ The three analysis scripts write into the results directory (`review_analysis` a
 To build the paper and the arXiv package:
 
 ```bash
-cd paper && latexmk -pdf weight_of_the_adjoint.tex && cd ..          # the bibliography is inline
+latexmk -pdf -cd paper/weight_of_the_adjoint.tex                     # the bibliography is inline
 python paper/make_arxiv.py --out arxiv_updated_2026-10-09            # clean package, checked to build standalone
 python paper/check_references.py                                     # checks each reference against Crossref/arXiv (needs network)
 ```
