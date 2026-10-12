@@ -7,9 +7,9 @@ classical Chebyshev pseudo-spectral solver (no neural network involved),
 so the demo exercises the model end-to-end without external datasets.
 
 Run with:
-    python -m skino.train --n_train 64 --epochs 200
-The default settings are intentionally tiny so the demo finishes in
-seconds on a CPU.
+    python -m ckino.train --n_train 64 --epochs 200
+The default settings are small; the demo takes a few minutes on a CPU, most of
+it spent generating the reference solutions.
 """
 from __future__ import annotations
 

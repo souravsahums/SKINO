@@ -1,305 +1,168 @@
-# CKINO — Chebyshev Kernel-Integral Neural Operator
+# The Weight of the Adjoint
 
-> A physics-motivated neural operator built on Chebyshev–rational spectral bases, low-rank learnable Green's-function kernels, Störmer–Verlet-style $(q,p)$ updates, Lie-generator equivariant lifting, and hypernetwork meta-conditioning.
+Code, archived results and paper source for
 
-CKINO is **not** a Fourier Neural Operator, **not** a Physics-Informed Neural Network, **not** a DeepONet, and **not** a graph/wavelet/Laplace operator. It is a deliberately new architecture combining a Chebyshev kernel-integral operator with structure-preserving (symplectic) updates and Lie-equivariant lifting. Its guarantees are *architectural* — they survive any optimiser or dataset — but a matched-capacity benchmark shows they do **not** amount to blanket superiority: at ~25k parameters **CKINO wins 4 of 7 PDE problems and a tensorised Fourier operator (T-FNO) wins 3**, and the symplectic structure provides no measured accuracy gain. See the honest summaries in [`validation/report/research_paper.md`](validation/report/research_paper.md) and [`track2/REPORT_FINAL_GPU.md`](track2/REPORT_FINAL_GPU.md).
+**The Weight of the Adjoint: Which Symplectic Form a Neural Operator Preserves, and Whether It Survives the Lift**
+Sourav Sahu and Gareth O'Brien, Microsoft, 2026
 
----
+[Paper (PDF)](paper/weight_of_the_adjoint.pdf) · [LaTeX source](paper/weight_of_the_adjoint.tex) · [MIT licence](LICENSE)
 
-## 1. The landscape of existing neural operators
-
-| Family | Representative paper | Architectural idea (one line) | Dominant failure mode |
-| --- | --- | --- | --- |
-| **PINN** | Raissi, Perdikaris, Karniadakis 2019 | MLP $u_\theta(x,t)$ + soft physics loss $\|R[u_\theta]\|^2$ | Solves a *single instance*; multi-scale gradient pathologies; soft physics is empirically violated. |
-| **FNO** | Li, Kovachki et al. 2021 | Stack of $\mathcal{F}^{-1} R_\phi \mathcal{F}$ Fourier multipliers | Implicit periodicity + uniform grids; Gibbs pollution at non-periodic boundaries; no conservation. |
-| **DeepONet** | Lu et al. 2021 | Branch net (function) $\times$ Trunk net (location) | Fixed sensor grid for branch input; no built-in symmetries; data-hungry. |
-| **GNO** | Li et al. 2020 | Message passing over a sampled graph | Quadratic memory in node count; no global spectral accuracy. |
-| **WNO** | Tripura, Chakraborty 2022 | Wavelet multipliers instead of Fourier | Same diagonal-multiplier limitation as FNO; non-trivial inverse on bounded domains. |
-| **LNO** | Cao et al. 2023 | Laplace-domain pole/residue parameterisation | Optimisation is hard (poles wander); periodic-extension issues persist. |
-| **PINO** | Li et al. 2021 | FNO + PINN-style residual loss | Inherits FNO's grid restrictions; the residual loss is still soft. |
-| **GNOT / OFormer** | Hao et al. 2023 / Li et al. 2022 | Cross-attention transformer over function samples | $\mathcal{O}(N^2)$ attention; no conservation; no spectral inductive bias. |
-| **Neural ODE / NCDE operators** | Chen et al. 2018 (and ops variants) | Continuous-depth ODE with learned vector field | No symplectic structure unless added; energy drift on long roll-outs. |
-| **Hamiltonian / SympNet** | Greydanus et al. 2019 / Jin et al. 2020 | Network parameterising $H$ then symplectic flow | **Not an operator** — works on finite-dim phase space, not function fields. |
-| **Clifford / Steerable operators** | Brandstetter et al. 2022/2023 | Equivariance under rotation/Lorentz groups | Spectral accuracy is not addressed; complex algebra overhead. |
-
-### Where each one breaks
-
-* **PINNs** drown in conflicting gradient signals when boundary, initial, and PDE losses compete; they have to be re-trained for every new PDE instance.
-* **FNO** is *exactly* exact only on the torus. Real engineering domains have walls, inflows, free surfaces — the moment you leave the periodic box, FNO loses an order of magnitude in accuracy at the boundary.
-* **DeepONet** ties the branch input to a fixed sensor grid, which means swapping resolutions at inference is undefined.
-* **GNO / Transformers** are flexible but pay $\mathcal{O}(N^2)$ memory; long-time roll-outs drift because nothing pins the energy.
-* **Hamiltonian-style** networks have the right *invariant*, but they are not operators — they map $\mathbb{R}^{2d} \to \mathbb{R}^{2d}$, not $L^2 \to L^2$.
-
-CKINO's design picks the best inductive bias from each line and fuses them into a *single coherent operator*.
+> **Names.** The repository is called `SKINO` on GitHub and the Python package is `ckino`. In the paper, **SA-Cheb** is the symplectic construction and **CKINO** is the non-gradient Chebyshev kernel-integral operator that serves as a baseline. The older name survives in a few identifiers: the `SKINO_RESULTS_DIR` variable, the `--skino-*` options of `HamiltonianNN/`, and the `skino` label that `track2/symplectic_defect.py` prints for the CKINO row.
 
 ---
 
-## 2. CKINO architecture
+## The question
 
-```
-              f(x)  on  N+1 Chebyshev–Gauss–Lobatto nodes
-                              │
-                              ▼
-                   ┌──────────────────────┐
-                   │  Lie-equivariant     │     equivariance / sample-eff.
-                   │  lifting  E          │     → Theorem 4
-                   └──────────────────────┘
-                              │
-                  PDE coeff μ │
-                       │      ▼
-                  ┌─────────┐ │   FiLM code c
-                  │ HyperNet│─┘
-                  └─────────┘
-                              │
-            ┌──────────────── ▼ ──────────────────┐
-            │    (q,p) block × depth L            │   volume-preserving
-            │  (Störmer–Verlet on (q,p)-split)    │   (NOT symplectic)
-            │  with                               │
-            │     U_q, U_p =                      │   universal approx.
-            │     low-rank kernel-integral ops    │   → Theorem 1
-            │     k(x,y)=Σ σ_r φ_r(x)ψ_r(y)       │
-            └────────────────┬────────────────────┘
-                              │
-                              ▼
-                   ┌──────────────────────┐
-                   │   1×1 projection     │     spectral convergence
-                   │   (channel mix)      │     → Theorem 3
-                   └──────────────────────┘
-                              │
-                              ▼
-              u(x)  on the same CGL nodes
-```
+Structure-preserving neural operators rest on a question that is rarely stated explicitly: symplectic with respect to which inner product? On a non-uniform grid the discrete $L^2$ adjoint is $K^{*}=W^{-1}K^{\top}W$, where $W$ holds the quadrature weights, and the choice of $W$ selects which symplectic form a gradient shear $F=K^{*}\rho(Kq)$ preserves. The paper makes that choice explicit, measures it, and asks three questions.
 
-### 2.1 Chebyshev–rational basis
+| | Question | Paper |
+| --- | --- | --- |
+| RQ1 | Does each construction preserve the form it claims, and only that one? | §6.1 |
+| RQ2 | Does matching the form to the discretisation of the data improve prediction on uniform, Chebyshev and mapped grids? | §6.2 |
+| RQ3 | Does the guarantee survive the lift, projection and residual update that conventionally wrap the core, and what does end-to-end symplecticity buy over a long rollout? | §6.3 |
 
-* CGL nodes $x_k = \cos(k\pi/N)$ on $[-1,1]$ with optional rational map $s(y) = L(1+y)/(1-y)$ to handle half-line domains.
-* Differentiation by Trefethen's spectral matrix $D$ — exponential accuracy on smooth fields, *no periodicity assumption*. **Fixes FNO's main defect.**
+The mathematics is in §3 (Theorem 5 is the exactness result), the two operators in §4, the protocol in §5, and a secondary nine-equation benchmark that places the constructions among standard neural operators in §7.
 
-### 2.2 Low-rank kernel-integral operator
+## Results in brief
 
-For each layer we approximate the integral kernel by a Mercer expansion truncated at rank $R$:
+* **RQ1, which form.** The symplectic defect, computed from the autograd Jacobian, is at most $4.4\times10^{-16}$ in the form a shear was built from and $O(1)$ in the other, in 1-D, 2-D and 3-D. The non-gradient CKINO kernel has a defect of about 1.4 in both forms: its block has unit Jacobian determinant (it is volume-preserving), which is not symplecticity (Appendix A).
+* **RQ2, matching the grid.** On uniform grids the matched form has the lower error in 17 of 22 paired comparisons over five seeds, and none favours the other form. On Chebyshev nodes the preference reverses in two of three comparisons and is tied in the third; on a mapped grid, where neither standard form is the quadrature, matching brings no consistent benefit. The weights also set the quadrature of the kernel integral, so the experiments cannot separate the form from the quadrature rule. The control that would is described in §9 and has not been run.
+* **RQ3, end to end.** Over $2\times10^{4}$-step rollouts, end-to-end symplectic maps stayed bounded in 60 of 63 runs (the exceptions: one mismatched-form model in 3-D), while a lifted variant with a non-symplectic linear lift and projection was bounded in 3 of 12. Bounded is not accurate: an identity map is bounded too, the error is comparable to the signal, and the energy is off by more than 100%, against 0.03% for the reference solver.
+* **Benchmark.** 783 runs over nine equations in 1-D, 2-D and 3-D at matched parameter count, plus 338 further training runs for the form and long-horizon experiments. No operator dominates (§8). SA-Cheb wins reliability under long rollout (the lift-free, matched-form variant is the only family bounded in all 12 runs, though not accurate) and accuracy on the non-periodic and multi-dimensional problems, clearly on three of four. SNO and T-FNO win discretisation invariance, and the Fourier family has the lowest mean error on every periodic 1-D problem. A workload that is periodic, or that must be evaluated at a resolution the model was not trained on, is better served by a Fourier operator.
 
-$$
-k(x,y) \;=\; \sum_{r=1}^{R} \sigma_r\, \varphi_r(x)\, \psi_r(y)^\top, \qquad R \ll N.
-$$
+## Repository layout
 
-* Parameters: $\mathcal{O}(R\, N\, c)$ — *linear* in grid size.
-* Action: $\mathcal{O}(R\, N\, c)$ FLOPs — same as FNO's diagonal multiplier, but **without** the periodic-FFT assumption.
-* Universal approximator (Theorem 1).
+| Path | Contents |
+| --- | --- |
+| [`ckino/`](ckino/) | The PyTorch package. [`sacheb.py`](ckino/sacheb.py): SA-Cheb (`SAChebNO`, `SAChebShear`, `SelfAdjointChebKernel`). [`nd.py`](ckino/nd.py), [`kernel.py`](ckino/kernel.py), [`symplectic.py`](ckino/symplectic.py), [`equivariance.py`](ckino/equivariance.py), [`hypernet.py`](ckino/hypernet.py), [`model.py`](ckino/model.py): CKINO and its building blocks, in 1-D and N-D. [`train.py`](ckino/train.py): a small Burgers' demo. |
+| [`track2/`](track2/) | Everything behind the paper's experiments: reference solvers ([`pde_solvers.py`](track2/pde_solvers.py)), the model registry and baselines ([`models.py`](track2/models.py), [`operators.py`](track2/operators.py)), experiment drivers ([`launcher.py`](track2/launcher.py), [`experiments_paper.py`](track2/experiments_paper.py), [`longhorizon.py`](track2/longhorizon.py), [`multires.py`](track2/multires.py), [`symplectic_defect.py`](track2/symplectic_defect.py)), analysis and figure scripts, cluster scripts (`aml_*.py`) and the archived per-run results (`results*/`). |
+| [`paper/`](paper/) | LaTeX source and PDF of the paper, the arXiv package builder ([`make_arxiv.py`](paper/make_arxiv.py), [`make_arxiv_metadata.py`](paper/make_arxiv_metadata.py)) and the bibliography checker ([`check_references.py`](paper/check_references.py)). |
+| [`arxiv_updated_2026-10-09/`](arxiv_updated_2026-10-09/), [`arxiv/`](arxiv/) | Metadata, abstract and submission steps for the arXiv packages. The packages themselves (`*.zip`) are regenerated by `paper/make_arxiv.py` and are not tracked. |
+| [`validation/`](validation/) | A small CPU-scale harness that compares CKINO with baselines on Hamiltonian ODEs, two PDEs and a porous-flow problem. Separate from the paper; see its [README](validation/README.md). |
+| [`HamiltonianNN/`](HamiltonianNN/) | A side study: FNO3D against CKINO3D on a 3-D elastic-lattice simulator. Separate from the paper; see its [README](HamiltonianNN/README.md). |
+| `proofs.md`, `CKINO_BOOK.md`, `track2/*.md`, `validation/report/` | Working notes and intermediate reports. They are not kept in sync with the paper; where they differ, the paper is authoritative. |
 
-### 2.3 Störmer–Verlet-style $(q,p)$ block
+## Quick start
 
-Channels are split as $(q, p)$ with two learned vector fields $U_q, U_p$. The update
-
-$$
-p \leftarrow p - \tfrac{dt}{2}\, U_q(q),\quad q \leftarrow q + dt\, U_p(p),\quad p \leftarrow p - \tfrac{dt}{2}\, U_q(q)
-$$
-
-has unit Jacobian determinant, so it is **volume-preserving**. It is **not
-symplectic**: a shear is symplectic only if the Jacobian of its vector field is
-*self-adjoint*, which the unconstrained low-rank kernel does not satisfy. The
-measured relative symplectic defect is **≈ 1.37** at every resolution
-(`track2/symplectic_defect.py`). The original symplecticity claim (Theorem 2) is
-**retracted**; see `proofs.md`. An exactly symplectic variant is given by
-Theorem 2' / SA-Cheb (defect 2×10⁻¹⁶).
-
-### 2.4 Lie-generator equivariant lifting
-
-Inputs are lifted by a small set of antisymmetric depthwise convolutions that approximate Lie generators (translations, dilations). This forces the operator to commute with the corresponding symmetry group, which gives a provable $\sqrt{|G|}$ data-efficiency gain (Theorem 4).
-
-### 2.5 Hypernetwork meta-conditioning
-
-A tiny MLP $H_\psi : \mu \mapsto c$ maps the PDE-coefficient vector (e.g. viscosity, wave speed, anisotropy tensor) to a FiLM modulation code injected into every block. Consequence: **one trained model serves an entire PDE family**; switching coefficients is a single forward pass, not a re-training.
-
----
-
-## 3. How CKINO compares
-
-> **Honest framing.** The contrasts below are *architectural*. They do **not**
-> imply CKINO wins in practice. At matched ~25k parameters across 9 PDE problems,
-> what predicts the winner is **matching the basis to the boundary conditions**
-> (Chebyshev 3–5× better on a non-periodic problem; Fourier better on 4 of 5
-> periodic ones), *not* structural priors: exact symplecticity, when actually
-> achieved, is a measurable **cost** (see §6.5 and `track2/REPORT_FINAL_GPU.md`).
-> Read this as "how CKINO differs," not "why it wins."
-
-### 3.1 Versus PINN
-* PINN solves *one* PDE instance; CKINO learns the operator for a whole family.
-* PINN suffers from gradient pathology between mismatched loss terms; CKINO has a single supervised regression loss.
-* Neither enforces conservation structurally: PINN's is a soft penalty, and CKINO's block is volume-preserving but not symplectic.
-
-### 3.2 Versus FNO
-* FNO assumes periodicity and uniform grids; CKINO uses Chebyshev → arbitrary boundary conditions and spectral accuracy on bounded/unbounded domains. **This is the one contrast the benchmark confirms**: on a non-periodic Hamiltonian problem the Chebyshev operators beat every Fourier operator by 3–5×.
-* Neither has a conservation guarantee: CKINO's blocks are volume-preserving, not symplectic (defect ≈ 1.37), so the energy-drift bound formerly claimed as Theorem 5 is **retracted**.
-* FNO's diagonal multiplier is rank-$N$ in spectrum; CKINO's rank-$R$ Mercer kernel is *more expressive per parameter* on smooth Green's functions — though at matched capacity this does **not** translate into better accuracy: T-FNO matches or beats CKINO on heat, wave1d and Burgers.
-
-### 3.3 Versus DeepONet
-* DeepONet's branch net requires a fixed sensor grid; CKINO's weights are grid-agnostic on CGL nodes (resample the basis) — but this does **not** give zero-shot super-resolution on the uniform grids PDE data uses (see §6.5).
-* DeepONet has no built-in symmetries; CKINO's lifting layer cuts sample complexity by $\sqrt{|G|}$.
-
-### 3.4 Versus Transformer operators (GNOT, OFormer)
-* Attention is $\mathcal{O}(N^2)$; CKINO's kernel integral is $\mathcal{O}(R\,N)$ with $R \ll N$.
-* Transformers have no spectral inductive bias; CKINO has one. Neither conserves structure.
-
-### 3.5 Versus Hamiltonian / SympNet
-* Those are not operators (they act on $\mathbb{R}^{2d}$, not function fields). Lifting the symplectic idea to *functional* phase space is achieved not by CKINO but by **SA-Cheb** (`ckino/sacheb.py`, Theorem 2'), which is exactly symplectic on a non-periodic grid — and which the benchmark shows does not thereby become more accurate.
-
----
-
-## 4. Mathematical guarantees (formal proofs in `proofs.md`)
-
-| # | Theorem | Property |
-| - | --- | --- |
-| 1 | **Universal approximation** of continuous operators on compact subsets of $C(\Omega)$. |
-| 2 | ~~Exact symplecticity of every block~~ — **RETRACTED** (proof conflated unit determinant with $\omega$-preservation; measured defect ≈ 1.37). Replaced by **2'**. |
-| 2' | **Exact symplecticity of a self-adjoint gradient shear** (SA-Cheb) on a non-periodic CGL grid, using the weighted adjoint $K^{*}=W^{-1}K^{\top}W$; measured 2×10⁻¹⁶. |
-| 3 | **Spectral convergence** — algebraic rate $N^{-k}$ for $C^k$ targets, exponential rate $\rho^{-N}$ for analytic targets. |
-| 4 | **Sample-complexity reduction** by factor $\sqrt{|G|}$ under Lie-group equivariance. |
-| 5 | ~~Discrete energy bound~~ — **RETRACTED** (its proof invoked the withdrawn Theorem 2). |
-
-See [proofs.md](proofs.md) for the complete statements and proofs.
-
----
-
-## 5. Repository layout
-
-```
-.
-├── README.md                ← this file
-├── proofs.md                ← Theorems 1–5 with proofs
-└── ckino/
-    ├── __init__.py
-    ├── basis.py             ← Chebyshev / rational basis utilities
-    ├── kernel.py            ← LowRankKernelIntegral (Mercer-truncated Green's fn, 1-D nodal)
-    ├── symplectic.py        ← SymplecticBlock (Störmer–Verlet, 1-D)
-    ├── equivariance.py      ← LieLifting (1-D)
-    ├── hypernet.py          ← HyperNet (PDE-parameter conditioning)
-    ├── model.py             ← CKINO 1-D module
-    ├── nd.py                ← resolution-agnostic ND building blocks + CKINO_ND / CKINO2D / CKINO3D
-    └── train.py             ← demo on viscous Burgers' (no external dataset)
-```
-
----
-
-## 6. Quick start
+Tested here with Python 3.13, PyTorch 2.12 (CPU), NumPy 2.1 and Matplotlib 3.10; the archived GPU runs used PyTorch 2.8 and 2.13. The operators in `ckino/` need only PyTorch.
 
 ```bash
-# only PyTorch is required
-pip install torch
-
-# tiny end-to-end demo (Burgers' equation operator, log-uniform viscosity)
-python -m skino.train --n_train 64 --epochs 200
+pip install torch numpy matplotlib
 ```
 
-Programmatic use:
+### SA-Cheb
 
 ```python
 import torch
-from skino import CKINO
+from ckino.sacheb import SAChebNO
 
-model = CKINO(
-    n_modes=32,           # 33 CGL nodes on [-1, 1]
-    in_channels=1,
-    out_channels=1,
-    hidden_channels=32,   # must be even (q, p split)
-    rank=8,               # Mercer truncation
-    depth=4,              # number of symplectic blocks
-    pde_param_dim=1,      # μ = log10(ν) for Burgers'
-    n_generators=2,       # Lie generators in the lifting layer
-    dt=0.1,               # symplectic step size
-)
-
-u0 = torch.randn(8, 1, 33)         # batch of initial conditions
-mu = torch.randn(8, 1)              # batch of PDE coefficients
-u_T = model(u0, mu)                 # predicted solution at time T
+# 65 Chebyshev-Gauss-Lobatto nodes, one (q, p) pair. lift=False: the shears act directly on the
+# PDE's own (q, p) channels, with no lift or projection, so x_{t+1} = model(x_t) is exactly
+# symplectic in the Clenshaw-Curtis form W_cheb.
+model = SAChebNO(n_train=64, in_channels=2, out_channels=2,
+                 rank=8, depth=3, weighted=True, lift=False)
+y = model(torch.randn(4, 2, 65))        # (batch, [q, p], nodes) -> same shape
 ```
 
----
+| Option | Effect |
+| --- | --- |
+| `weighted=False` (or `weight_kind="unif"`) | Uniform form $W_{\mathrm{unif}}$: the adjoint is the plain transpose, the matched form on a uniform grid. |
+| `weight_kind="kte"` | The form of the Kosloff-Tal-Ezer mapped grid. |
+| `lift=True`, `hidden_channels=H` | Lifted variant: a pointwise linear lift and projection around the symplectic core. The shears are symplectic; the end-to-end map is not. |
+| `canonical=True` (with `lift=False`) | The core inside a canonical symplectic wrapper. |
+| `spatial_dims=2` or `3` | Tensor-product basis and quadrature in 2-D and 3-D. |
+| `adjoint_eps > 0` | Perturbs the adjoint, dialling symplecticity down continuously. |
 
-## 6.5 Resolution agnosticism, 2-D, and 3-D
-
-**Partly — CKINO's weights are defined continuously, but zero-shot super-resolution does *not* work on uniform PDE grids.**
-
-The kernel coefficients in the 1-D [`ckino/kernel.py`](ckino/kernel.py) are stored *in nodal form* on the training grid. The dimension-agnostic code in [`ckino/nd.py`](ckino/nd.py) stores the kernel basis functions as **Chebyshev coefficients**, which define a *continuous* polynomial on $[-1,1]^d$, so the same trained weights can in principle be evaluated on any tensor-product CGL grid without retraining or an FFT.
-
-**Empirical reality (important).** This continuous parameterisation does **not** deliver discretisation-invariance on the uniform grids PDE datasets actually use. Trained at $N=64$ and evaluated at $N=128$ on identical fields, CKINO's one-step error grows **13–81×**, while a pure-spectral FNO/T-FNO is essentially exact (ratio $\approx 1.0$). CKINO's kernel is invariant on its *native* CGL nodes, but PDE data is uniform — so the defining neural-operator property does not materialise in practice. Do not rely on CKINO for zero-shot super-resolution; see [`validation/report/research_paper.md`](validation/report/research_paper.md) §4.9.
-
-### 2-D and 3-D models
+Measuring the defect of one shear against both inner products (the paper's instrument, in miniature):
 
 ```python
-import torch
-from skino import CKINO2D, CKINO3D
+from ckino.sacheb import SAChebShear
+from ckino.nd import clenshaw_curtis_weights
 
-# 2-D operator: e.g. for Navier–Stokes vorticity, Darcy flow, Helmholtz, etc.
-m2 = CKINO2D(
-    n_train=32,           # parameterise basis to degree 32 per axis
-    in_channels=1, out_channels=1,
-    hidden_channels=16, rank=8, depth=4,
-    pde_param_dim=1,      # e.g. Reynolds number / log-permeability
-)
-u_T = m2(torch.randn(B, 1, 33, 33), mu=torch.randn(B, 1))
+n = 33                                                  # CGL nodes
+shear = SAChebShear(n_coeff=n, channels=1, hidden=8, rank=4, weighted=True).double()
+shear.gain.data.fill_(0.7)                              # the gain starts at 0, i.e. the identity shear
+q = torch.randn(n, dtype=torch.float64)
+A = torch.autograd.functional.jacobian(lambda v: shear(v.view(1, 1, n)).view(-1), q)   # A = DF
 
-# Same weights on a finer grid (runs, but does NOT preserve accuracy on uniform PDE data — see §6.5).
-u_T_hi = m2(torch.randn(B, 1, 65, 65), mu=torch.randn(B, 1))
-
-# 3-D operator: e.g. for 3-D wave / Maxwell / elasticity.
-m3 = CKINO3D(
-    n_train=16,
-    in_channels=3, out_channels=3,   # vector field
-    hidden_channels=16, rank=8, depth=3,
-    pde_param_dim=1,
-)
-u_T = m3(torch.randn(B, 3, 17, 17, 17), mu=torch.randn(B, 1))
+for name, w in [("W_cheb", clenshaw_curtis_weights(n - 1, dtype=torch.float64)),
+                ("W_unif", torch.ones(n, dtype=torch.float64))]:
+    W = torch.diag(w)
+    print(name, ((W @ A - A.T @ W).norm() / (W @ A).norm()).item())
+# W_cheb ~ 2e-16 (the form the adjoint was built from); W_unif ~ 0.6 (O(1))
 ```
 
-### Cost and parameter count
+### CKINO
 
-For a $d$-dimensional grid $(N+1)^d$ with hidden width $c$, rank $R$, and depth $L$:
+```python
+from ckino import CKINO
 
-| Quantity | CKINO ND | FNO ND |
-| --- | --- | --- |
-| Parameters | $\mathcal{O}(L\, R\, c^2 + L\, d\, R\, N)$ | $\mathcal{O}(L\, c^2\, k_{\max}^d)$ |
-| FLOPs / forward | $\mathcal{O}(L\, R\, c\, N^d)$ | $\mathcal{O}(L\, c\, N^d \log N)$ (FFT) |
-| Memory | $\mathcal{O}(c\, N^d)$ | $\mathcal{O}(c\, N^d)$ |
-| Periodicity required | **no** | yes |
-| Conservation guaranteed | **no** (Thm 2, 5 retracted) | no |
+model = CKINO(n_modes=32, in_channels=1, out_channels=1, hidden_channels=32, rank=8,
+              depth=4, pde_param_dim=1, n_generators=2, dt=0.1)
+u_T = model(torch.randn(8, 1, 33), torch.randn(8, 1))   # 33 CGL nodes; one PDE coefficient per sample
+```
 
-Because the CKINO kernel is *separable* in $d$ dimensions (rank-$R$ along each axis independently), parameter count grows only **linearly** in $d$ and $N$, where FNO grows as $k_{\max}^d$. This is the second axis on which CKINO is more data-efficient than FNO.
+`CKINO2D` and `CKINO3D` take the same arguments, with `n_train` (the basis degree per axis) in place of `n_modes`. `pde_param_dim=0` disables the hypernetwork, which the paper's experiments do not use. The CKINO block is volume-preserving but not symplectic. Its kernel is stored as Chebyshev coefficients, so the same weights can be evaluated on a grid of any size, but accuracy does not transfer: trained at $N=64$ and evaluated at $N=128$, CKINO with a convolutional lift degrades by $57\times$ on advection while SNO and T-FNO change by less than 2% (§7.5).
 
-### Internal API
+`python -m ckino.train --n_train 64 --epochs 200` trains CKINO on a viscous-Burgers' family with a Chebyshev reference solver. It is a smoke test, not a benchmark, and takes a few minutes on a CPU, most of it spent generating the reference solutions.
 
-The ND building blocks are independently reusable:
+## Reproducing the paper
 
-* `SeparableKernelIntegralND(spatial_dims, n_train, channels, rank)` — the kernel-integral op.
-* `SymplecticBlockND(spatial_dims, n_train, channels, rank, dt)` — Störmer–Verlet block.
-* `LieLiftingND(spatial_dims, in_channels, out_channels, n_generators, kernel_size)` — equivariant lift.
-* `cheb_eval_matrix(n_coeff, n_query)` — basis evaluation.
-* `clenshaw_curtis_weights(n)` — quadrature.
+Run everything from the repository root. The drivers write to `track2/results_paper` unless `--results-dir` or the `SKINO_RESULTS_DIR` variable says otherwise, and the launcher skips any run whose result file already exists, so use an empty directory for a clean run.
 
----
+```bash
+# Reference solvers: self-tests (about 20 s on a CPU)
+python -m track2.pde_solvers
 
-## 7. Empirical positioning
+# RQ1: the defect against each inner product (dense Jacobian; Hutchinson probes for the largest 3-D grid)
+python -m track2.symplectic_defect --dims 1 2 3 --forms W_cheb W_unif W_kte
+python -m track2.symplectic_defect --probe-study          # probe estimator against the dense value
 
-The training script `ckino/train.py` reproduces the following qualitative facts on the 1-D viscous Burgers' family $u_t + u u_x = \nu u_{xx}$, $\nu \in [10^{-3}, 10^{-1}]$, with homogeneous Dirichlet BC (a setting that *breaks FNO's periodicity assumption*):
+# RQ2 and RQ3 and the benchmark (GPU): list the jobs, or print the exact cluster command lines
+python -m track2.launcher --plan --stage 1d --configs full
+python -m track2.aml_trigger --dry-run                    # the main matrix
+python -m track2.aml_trigger --review --dry-run           # the additional runs of §5.5
+python -m track2.longhorizon --problem wave1d --steps 20000 --device cuda    # one long-horizon run
 
-* Energy/mass drift on long roll-outs is *measured*, not guaranteed (Theorem 5 is retracted). Where CKINO's drift is smaller than un-regularised FNO/DeepONet this is an empirical observation, and it does *not* translate into better prediction accuracy.
-* Wall-clock per forward pass is dominated by the rank-$R$ kernel matvec — competitive with FNO at $R \le N/4$ and asymptotically faster for high resolutions because no FFT is required.
+# Tables and figures from the archived results (CPU; about 1.5 min)
+python -m track2.review_analysis --results-dir track2/results_review --baseline-dir track2/results_gpu_v3
+python -m track2.review_tables   --results-dir track2/results_review --baseline-dir track2/results_gpu_v3
+python -m track2.seed_analysis   --results-dir track2/results_gpu_v3
+```
 
-> The `ckino/train.py` script is a minimal smoke-test, not a benchmark. The rigorous, parameter-matched, multi-seed comparison across seven PDE problems lives in [`validation/report/research_paper.md`](validation/report/research_paper.md) and [`track2/REPORT_FINAL_GPU.md`](track2/REPORT_FINAL_GPU.md); its headline is **CKINO 4/7 vs T-FNO 3/7** — a problem-class-dependent tie.
+The three analysis scripts write into the results directory (`review_analysis` also accepts `--out`): `review_summary.md` (every table of the additional runs, with verdicts) and the `fig_review_*.png` figures; `review_tables.tex` (the table bodies used in the paper); `TABLES_MULTISEED.md`, `TABLES_ROLLOUT.md` and their figures. Run on the archived data, they regenerate the committed `review_summary.md`, `review_tables.tex`, `TABLES_MULTISEED.md` and `TABLES_ROLLOUT.md` exactly.
 
----
+To build the paper and the arXiv package:
 
-## 7.5 Azure ML experiment scripts — workspace resolution
+```bash
+cd paper && latexmk -pdf weight_of_the_adjoint.tex && cd ..          # the bibliography is inline
+python paper/make_arxiv.py --out arxiv_updated_2026-10-09            # clean package, checked to build standalone
+python paper/check_references.py                                     # checks each reference against Crossref/arXiv (needs network)
+```
 
-The cloud experiment tooling in `track2/` (`aml_trigger.py`, `aml_fetch.py`,
-`azureml_submit.py`) **auto-detects the workspace from the compute instance it
-runs on**: on an Azure ML compute instance it reuses that instance's own
-subscription, resource group and workspace (via the `AZUREML_ARM_*` variables
-Azure ML sets automatically, falling back to `MLClient.from_config()`), so no
-manual configuration is needed.
+## Results and data
 
-To target a *different* workspace — or for the `aml_submit_window.ps1` helper —
-override with environment variables:
+| Directory | Contents |
+| --- | --- |
+| `track2/results_gpu_v2`, `track2/results_gpu_v3` | Per-run JSON results and summary tables of the main matrix: execution A and execution B (§7.4). |
+| `track2/results_review` | The additional runs (§5.5): seeds 3 and 4 of the headline pairs, the two non-uniform grids, long-horizon controls and the multi-resolution test, the defect measurements, and `review_summary.md`. |
+| `track2/results_cpu` | The probe-against-dense study of the defect estimator (§6.1). |
+| other `track2/results*/` | Earlier result sets, kept for provenance. |
+
+Per-run result files, the analysis scripts and the figure generators are archived here. Model checkpoints (`*.pt`) and stored field snapshots (`*.npz`, seed 0 only) are not, so the field figures cannot be regenerated from the repository alone. The archived runs used a single accelerator type (Tesla T4, TF32 disabled).
+
+## Known limitations
+
+The paper's §9 lists them all; those that matter most to anyone reusing the code or the results:
+
+* **Form and quadrature are not separated.** The weight $W$ defines the quadrature of the kernel integral as well as the adjoint, so the matched and mismatched variants differ in the forward operator too (§4.2). The experiments show that using the grid's quadrature weights throughout helps where the grid has a standard quadrature, not that the symplectic form alone is responsible.
+* **The `kdv` problem is linear as generated.** The exponential integrator behind it multiplies its nonlinear term by an extra factor of the micro-step, so the stored trajectories are those of the linear dispersive equation $u_t=u_{xxx}$ (see the `KdVProblem` docstring in [`track2/pde_solvers.py`](track2/pde_solvers.py)). Every result labelled `kdv` is a result on a linear problem. A corrected solver is registered as `kdv_nl` (it conserves $\int(u_x^2+2u^3)\,dx$ to $4\times10^{-5}$ over 100 stored steps); the benchmark has not been re-run with it.
+* **Baselines are re-implementations.** SNO, GENERIC-FNO, FNO, T-FNO, U-FNO, U-Net, DeepONet and the Transformer were written from the published descriptions, not taken from the authors' code, and run here at 25k to 262k parameters (SNO's authors train about 2.3M), so the numbers are not reproductions of theirs. Our GENERIC-FNO diverged in all 12 entries, a defect of that implementation rather than evidence about the published method.
+* **Repetition is partial.** The two executions of the main matrix, and the additional runs on a newer PyTorch, cover part of the study (§7.4); some claims rest on a single execution.
+
+## Azure ML
+
+The cluster scripts in `track2/` (`aml_trigger.py`, `aml_fetch.py`, `azureml_submit.py`) detect the workspace from the compute instance they run on (the `AZUREML_ARM_*` variables Azure ML sets, falling back to `MLClient.from_config()`), so they need no configuration there. To target a different workspace, or to use `aml_submit_window.ps1`, set
 
 ```bash
 export AML_SUBSCRIPTION_ID="<your-subscription-id>"
@@ -308,12 +171,18 @@ export AML_WORKSPACE="<your-workspace-name>"
 export AML_STORAGE_ACCOUNT="<your-storage-account>"   # aml_submit_window.ps1 only
 ```
 
-PowerShell equivalent: `$env:AML_SUBSCRIPTION_ID = "<your-subscription-id>"` (and so on).
-Authentication uses `DefaultAzureCredential` (e.g. `az login`); no keys or secrets
-are committed to the repo.
+(PowerShell: `$env:AML_SUBSCRIPTION_ID = "<your-subscription-id>"`, and so on.) Authentication uses `DefaultAzureCredential`, for example after `az login`; no keys or secrets are stored in the repository. These scripts additionally need `azure-ai-ml` and `azure-identity`.
 
----
+## Licence and citation
 
-## 8. License & citation
+The code is released under the MIT licence ([`LICENSE`](LICENSE)). If you use it, please cite the paper:
 
-This is research code; use it as a starting point. If you build on the architecture, please cite the proofs document.
+```bibtex
+@misc{sahu2026weight,
+  title  = {The Weight of the Adjoint: Which Symplectic Form a Neural Operator Preserves,
+            and Whether It Survives the Lift},
+  author = {Sahu, Sourav and O'Brien, Gareth},
+  year   = {2026},
+  note   = {Preprint. Code and data: https://github.com/souravsahums/SKINO}
+}
+```
