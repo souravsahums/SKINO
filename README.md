@@ -3,6 +3,7 @@
 Code, archived results and paper source for
 
 **The Weight of the Adjoint: Which Symplectic Form a Neural Operator Preserves, and Whether It Survives the Lift**
+
 Sourav Sahu and Gareth O'Brien, Microsoft, 2026
 
 [Paper (PDF)](paper/weight_of_the_adjoint.pdf) · [LaTeX source](paper/weight_of_the_adjoint.tex) · [MIT licence](LICENSE)
@@ -13,7 +14,7 @@ Sourav Sahu and Gareth O'Brien, Microsoft, 2026
 
 ## The question
 
-Structure-preserving neural operators rest on a question that is rarely stated explicitly: symplectic with respect to which inner product? On a non-uniform grid the discrete $L^2$ adjoint is $K^{*}=W^{-1}K^{\top}W$, where $W$ holds the quadrature weights, and the choice of $W$ selects which symplectic form a gradient shear $F=K^{*}\rho(Kq)$ preserves. The paper makes that choice explicit, measures it, and asks three questions.
+Structure-preserving neural operators rest on a question that is rarely stated explicitly: symplectic with respect to which inner product? On a non-uniform grid the discrete $L^2$ adjoint is $K^{\ast}=W^{-1}K^{\top}W$, where $W$ holds the quadrature weights, and the choice of $W$ selects which symplectic form a gradient shear $F=K^{\ast}\rho(Kq)$ preserves. The paper makes that choice explicit, measures it, and asks three questions.
 
 | | Question | Paper |
 | --- | --- | --- |
@@ -66,7 +67,7 @@ y = model(torch.randn(4, 2, 65))        # (batch, [q, p], nodes) -> same shape
 
 | Option | Effect |
 | --- | --- |
-| `weighted=False` (or `weight_kind="unif"`) | Uniform form $W_{\mathrm{unif}}$: the adjoint is the plain transpose, the matched form on a uniform grid. |
+| `weighted=False` (or `weight_kind="unif"`) | Uniform form `W_unif`: the adjoint is the plain transpose, the matched form on a uniform grid. |
 | `weight_kind="kte"` | The form of the Kosloff-Tal-Ezer mapped grid. |
 | `lift=True`, `hidden_channels=H` | Lifted variant: a pointwise linear lift and projection around the symplectic core. The shears are symplectic; the end-to-end map is not. |
 | `canonical=True` (with `lift=False`) | The core inside a canonical symplectic wrapper. |
@@ -156,7 +157,7 @@ Per-run result files, the analysis scripts and the figure generators are archive
 The paper's §9 lists them all; those that matter most to anyone reusing the code or the results:
 
 * **Form and quadrature are not separated.** The weight $W$ defines the quadrature of the kernel integral as well as the adjoint, so the matched and mismatched variants differ in the forward operator too (§4.2). The experiments show that using the grid's quadrature weights throughout helps where the grid has a standard quadrature, not that the symplectic form alone is responsible.
-* **The `kdv` problem is linear as generated.** The exponential integrator behind it multiplies its nonlinear term by an extra factor of the micro-step, so the stored trajectories are those of the linear dispersive equation $u_t=u_{xxx}$ (see the `KdVProblem` docstring in [`track2/pde_solvers.py`](track2/pde_solvers.py)). Every result labelled `kdv` is a result on a linear problem. A corrected solver is registered as `kdv_nl` (it conserves $\int(u_x^2+2u^3)\,dx$ to $4\times10^{-5}$ over 100 stored steps); the benchmark has not been re-run with it.
+* **The `kdv` problem is linear as generated.** The exponential integrator behind it multiplies its nonlinear term by an extra factor of the micro-step, so the stored trajectories are those of the linear dispersive equation $u_t=u_{xxx}$ (see the `KdVProblem` docstring in [`track2/pde_solvers.py`](track2/pde_solvers.py)). Every result labelled `kdv` is a result on a linear problem. A corrected solver is registered as `kdv_nl` (it conserves $\int(u_x^2+2u^3)\mathrm{d}x$ to $4\times10^{-5}$ over 100 stored steps); the benchmark has not been re-run with it.
 * **Baselines are re-implementations.** SNO, GENERIC-FNO, FNO, T-FNO, U-FNO, U-Net, DeepONet and the Transformer were written from the published descriptions, not taken from the authors' code, and run here at 25k to 262k parameters (SNO's authors train about 2.3M), so the numbers are not reproductions of theirs. Our GENERIC-FNO diverged in all 12 entries, a defect of that implementation rather than evidence about the published method.
 * **Repetition is partial.** The two executions of the main matrix, and the additional runs on a newer PyTorch, cover part of the study (§7.4); some claims rest on a single execution.
 

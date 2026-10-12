@@ -6,10 +6,10 @@ A small, CPU-scale harness that exercises CKINO and baseline models on three tie
 
 | Level | Concern | Measured by |
 | ----- | ------- | ----------- |
-| L1 | Pointwise prediction accuracy | one-step relative $L^2$ error on held-out data (`test_rel_L2`) |
-| L2 | Long-rollout stability | relative $L^2$ error after a long autoregressive rollout (`long_horizon_rel_L2`) |
+| L1 | Pointwise prediction accuracy | one-step relative L² error on held-out data (`test_rel_L2`) |
+| L2 | Long-rollout stability | relative L² error after a long autoregressive rollout (`long_horizon_rel_L2`) |
 | L3 | Conservation | energy, mass, momentum and angular-momentum drift; the symplectic defect (tier 1) |
-| L4 | Generalisation to unseen resolutions | `results/efficiency.json`, `resolution_errors` ($N = 32 \to 64 \to 128$; `NaN` for the fixed-grid DeepONet and Transformer) |
+| L4 | Generalisation to unseen resolutions | `results/efficiency.json`, `resolution_errors` (N = 32, 64, 128; `NaN` for the fixed-grid DeepONet and Transformer) |
 | L5 | Computational efficiency | parameters, training and inference time, parameter memory ([`efficiency/`](efficiency/)) |
 | L6 | Ablation | CKINO against CKINO-NoSymp (tiers 2 and 3); the leap-frog ODE model against a generic MLP (tier 1) |
 
