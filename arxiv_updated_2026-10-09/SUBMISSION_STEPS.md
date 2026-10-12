@@ -66,7 +66,7 @@ certainly succeed too.
 ## Step 1 — Verify the package locally
 
 ```powershell
-cd "c:\Users\sahusourav\OneDrive - Microsoft\Desktop\AdvancedNeuroOperator"
+cd <repository root>
 $env:PATH = "C:\texlive\2026\bin\windows;$env:PATH"
 python paper\make_arxiv.py --out arxiv_updated_2026-10-09
 ```
